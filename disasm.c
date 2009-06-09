@@ -197,8 +197,8 @@ void disasm(uchar *buffer, long num)
 	case 0xbd: printf("mov bp, %s\n", imm16(buffer, &j)); break ;
 	case 0xbe: printf("mov si, %s\n", imm16(buffer, &j)); break ;
 	case 0xbf: printf("mov di, %s\n", imm16(buffer, &j)); break ;
-	case 0xc6: printf("mov %s\n", rm8_imm8(buffer, &j)) ; break ; 
-	case 0xc7: printf("mov %s\n", rm16_imm16(buffer, &j)) ; break ; 
+	case 0xc6: printf("mov byte %s\n", rm8_imm8(buffer, &j)) ; break ; 
+	case 0xc7: printf("mov word %s\n", rm16_imm16(buffer, &j)) ; break ; 
 	case 0xd4:
         { 
             switch (buffer[++j])
@@ -282,6 +282,7 @@ char *rm(uchar *buffer, long *j, uchar bit)
     uchar mod = (rm_byte) >> 6 ; 
     uchar rm = rm_byte &  7 ; 
     uchar dip = 0 ; 
+    uchar dip1 = 0 ; 
     signed short int disp = 0  ;
     char sign = '+' ;  
     switch (mod)
@@ -294,6 +295,7 @@ char *rm(uchar *buffer, long *j, uchar bit)
                 {
                   uchar low = buffer[++(*j)] ; 
                   disp  = (signed char) low ; 
+		  dip1 = 1 ; 
                 } break ;
         case 0x2:
                 {
@@ -301,7 +303,8 @@ char *rm(uchar *buffer, long *j, uchar bit)
                   uchar low =  buffer[*j] ; 
                   (*j)++ ; 
                   uchar high = buffer[*j] ; 
-                  disp =  (((high << 8) + low)  );          
+                  disp =  (((high << 8) + low)  );      
+                  dip1 = 1 ;     
                 } break ; 
         case 0x03:
                 {
@@ -312,12 +315,12 @@ char *rm(uchar *buffer, long *j, uchar bit)
     if (disp < 0)  { sign = '-' ; disp = -disp ; }
     switch (rm)
     {
-        case 0x00: sprintf(rm_var,"[bx+si%c%x]", sign,  disp) ; break ; 
-        case 0x01: sprintf(rm_var,"[bx+di%c%x]", sign,  disp) ; break ; 
-        case 0x02: sprintf(rm_var,"[bp+si%c%x]", sign,  disp) ; break ;
-        case 0x03: sprintf(rm_var,"[bp+di%c%x]", sign,  disp) ; break ;
-        case 0x04: sprintf(rm_var,"[si%c%x]", sign,  disp) ; break ;
-        case 0x05: sprintf(rm_var,"[di%c%x]", sign,  disp) ; break ;
+        case 0x00: if (dip != 1)  sprintf(rm_var,"[bx+si%c%x]", sign,  disp) ; else sprintf(rm_var,"[bx+si]") ; break ; 
+        case 0x01: if (dip != 1)  sprintf(rm_var,"[bx+di%c%x]", sign,  disp) ; else sprintf(rm_var,"[bx+di]") ;  break ; 
+        case 0x02: if (dip != 1)  sprintf(rm_var,"[bp+si%c%x]", sign,  disp) ; else sprintf(rm_var,"[bp+si]") ;  break ;
+        case 0x03: if (dip != 1)  sprintf(rm_var,"[bp+di%c%x]", sign,  disp) ; else sprintf(rm_var,"[bp+di]") ;  break ;
+        case 0x04: if (dip != 1)  sprintf(rm_var,"[si%c%x]", sign,  disp) ; else sprintf(rm_var,"[si]") ; break ;
+        case 0x05: if (dip != 1)  sprintf(rm_var,"[di%c%x]", sign,  disp) ; else  sprintf(rm_var,"[di]"); break ;
         case 0x06:
                  {
                     if (dip == 1)
@@ -331,7 +334,7 @@ char *rm(uchar *buffer, long *j, uchar bit)
                     }
                     else  {  sprintf(rm_var,"[bp%hx]",  disp) ; } break ; 
                  } break ; 
-        case 0x07: {  sprintf(rm_var,"[bx%c%hx]", sign, disp) ; } break ; 
+        case 0x07: if (dip != 1 ) sprintf(rm_var,"[bx%c%hx]", sign, disp) ; else  sprintf(rm_var,"[bx]") ; break ; 
     }
   return rm_var ; 
 }
