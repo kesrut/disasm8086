@@ -1,4 +1,4 @@
-nclude "disasm.h"
+#include "disasm.h"
  
 uchar var[64] ; 
 uchar rm_var[64] ; 
