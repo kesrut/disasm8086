@@ -584,14 +584,6 @@ char *jump_short(uchar *buffer, long *j)
   return var ; 
 }
 
-/*
-   (*j)++ ; 
-   uchar low = buffer[*j] ; 
-   (*j)++ ;
-   uchar high = buffer[*j] ;
-   signed short imm = ((high << 8) + low) ; 
-   sprintf(var, "0x%x", *j+imm+1) ;*/
- 
 char *m16(uchar *buffer, long *j)
 {
    memset(var, '\0', 64) ; 
