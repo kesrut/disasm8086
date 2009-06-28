@@ -1,8 +1,52 @@
-#include "disasm.h"
- 
+#include "disasm.h" 
+
 uchar var[64] ; 
 uchar rm_var[64] ; 
- 
+
+char *jump_near(uchar *buffer, long *j)
+{
+   memset(var, '\0', 64) ; 
+   (*j)++ ; 
+   uchar low = buffer[*j] ; 
+   (*j)++ ;
+   uchar high = buffer[*j] ;
+   signed short imm = ((high << 8) + low) ; 
+   sprintf(var, "0x%x", *j+imm+1) ; 
+   return var ;
+} 
+
+char *jump_near_indirect(uchar *buffer, long *j)
+{
+   memset(var, '\0', 64) ;
+   char *s = rm(buffer, j, 16) ;
+   sprintf(var, "%s", s) ; 
+   return var ; 
+}
+
+char *jump_far(uchar *buffer, long *j)
+{
+   memset(var, '\0', 64) ;
+   char *s = rm(buffer, j, 16) ;
+   sprintf(var, "%s", s) ; 
+   return var ; 
+}
+  
+char *jump_inter_segment(uchar *buffer, long *j)
+{
+  memset(var, '\0', 64) ; 
+  (*j)++ ;
+  uchar low = buffer[*j] ; 
+  (*j)++ ; 
+  uchar high = buffer[*j] ; 
+  unsigned short offset = (high << 8) + low ; 
+  (*j)++ ;
+  low = buffer[*j] ; 
+  (*j)++ ; 
+  high = buffer[*j] ;  
+  unsigned short segment = (high << 8) + low ; 
+  sprintf(var,"0x%x:0x%x", segment, offset) ; 
+  return var ;   
+}
 int main(int argc, char **argv)
 {
   uchar *buffer ; 
@@ -248,7 +292,10 @@ void disasm(uchar *buffer, long num)
                 default: j-- ; t=1 ;  break ; 
             }
         } tikrinti(t) ;
-        case 0xf4: printf("hlt\n") ; break ; 
+	case 0xea: printf("jmp %s\n", jump_inter_segment(buffer, &j)) ; break ; 
+	case 0xe9: printf("jmp %s\n", jump_near(buffer, &j)) ; break ; 
+	case 0xeb: printf("jmp short %s\n", jump_short(buffer, &j)); break ; 
+ 	case 0xf4: printf("hlt\n") ; break ; 
         case 0xf5: printf("cmc\n"); break ;
         case 0xf6: printf("mul al,%s\n", imm8(buffer, &j)) ; break ;   
         case 0xf7: printf("mul ax, %s\n", imm16(buffer, &j)); break ;  
@@ -276,6 +323,14 @@ void disasm(uchar *buffer, long num)
               {
                  printf("dec %s\n",  rm16(buffer, &j)) ; 
               } break ;
+	      case 0x04:
+	      {
+		printf("jmp %s\n", jump_near_indirect(buffer, &j)) ; 
+	      } break ;
+	      case 0x05:
+	      {
+                printf("jmp far %s\n", jump_far(buffer, &j)) ; 
+              } break ; 
               case 0x06:
               {
                 j++ ; printf("push %s\n", m16(buffer, &j)) ; 
@@ -359,7 +414,7 @@ char *rm(uchar *buffer, long *j, uchar bit)
                        (*j)++ ; 
                        uchar high = buffer[*j] ; 
                        disp = ((high << 8) + low) ;
-                       sprintf(rm_var,"[%hx]", disp) ; 
+                       sprintf(rm_var,"[0x%hx]", disp) ; 
                     }
                     else  {  sprintf(rm_var,"[bp%hx]",  disp) ; } break ; 
                  } break ; 
@@ -389,6 +444,8 @@ char *rm16_imm16(uchar *buffer, long *j)
    sprintf(var, "%s, 0x%x",s, imm) ;     
    return var ; 
 }
+
+/* moffs - need to implement segment override */
  
 char *moffs(uchar *buffer, long *j)
 {
@@ -401,6 +458,7 @@ char *moffs(uchar *buffer, long *j)
    sprintf(var, "[0x%x]", moffs) ; 
    return var ; 
 }
+
 char *rm16_imm8(uchar *buffer, long *j)
 {
     memset(var, '\0', 64) ; 
@@ -516,6 +574,23 @@ char *rm16(uchar *buffer, long *j)
   strcpy(var, s) ; 
   return var ; 
 }
+
+char *jump_short(uchar *buffer, long *j)
+{
+  memset(var, '\0', 64) ;
+  (*j)++ ; 
+  signed char imm = buffer[*j] ; 
+  sprintf(var, "0x%x", *j+imm+1) ; 
+  return var ; 
+}
+
+/*
+   (*j)++ ; 
+   uchar low = buffer[*j] ; 
+   (*j)++ ;
+   uchar high = buffer[*j] ;
+   signed short imm = ((high << 8) + low) ; 
+   sprintf(var, "0x%x", *j+imm+1) ;*/
  
 char *m16(uchar *buffer, long *j)
 {
@@ -528,3 +603,5 @@ char *m16(uchar *buffer, long *j)
    sprintf(var, "word [0x%x]", imm) ; 
    return var ;  
 }
+
+
