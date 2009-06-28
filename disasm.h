@@ -1,11 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+ 
 #define tikrinti(t) if ( t==0 ) break;
-
+ 
 char* reg8[8] = {"al", "cl", "dl","bl","ah","ch","dh","bh"} ; 
 char* reg16[8] = {"ax","cx","dx","bx","sp","bp","si", "di"} ;  
+char* sreg[4] = {"es", "cs", "ss", "ds"} ; 
+ 
 typedef unsigned char uchar ;
 typedef unsigned short int uint16;  
 uchar * open_file(char *name, long *num) ;
@@ -23,4 +25,6 @@ char *r16_rm16(uchar *buffer, long *j) ;
 char *rm8(uchar *buffer, long *j) ;
 char *rm16(uchar *buffer, long *j) ;  
 char *m16(uchar *buffer, long *j) ; 
-char *moffs16(uchar *buffer, long *j) ; 
+char *rm16_sreg(uchar *buffer, long *j) ;
+char *sreg_rm16(uchar *buffer, long *j) ;
+char * moffs(uchar *buffer, long *j) ;  
