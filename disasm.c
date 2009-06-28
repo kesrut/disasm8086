@@ -273,8 +273,16 @@ void disasm(uchar *buffer, long num)
   case 0xbd: printf("mov bp, %s\n", imm16(buffer, &j)); break ;
   case 0xbe: printf("mov si, %s\n", imm16(buffer, &j)); break ;
   case 0xbf: printf("mov di, %s\n", imm16(buffer, &j)); break ;
+  case 0xc2: printf("ret %s\n", imm16(buffer,&j)); break ;
+  case 0xc3: printf("ret\n") ; break ; 
   case 0xc6: printf("mov byte %s\n", rm8_imm8(buffer, &j)) ; break ; 
   case 0xc7: printf("mov word %s\n", rm16_imm16(buffer, &j)) ; break ; 
+  case 0xca: printf("retf %s\n", imm16(buffer, &j)) ; break ; 
+  case 0xcb: printf("retf\n") ; break ; 
+  case 0xcc: printf("int3\n") ; break ;
+  case 0xcd: printf("int %s\n", imm8(buffer, &j)) ; break ; 
+  case 0xce: printf("into\n"); break ; 
+  case 0xcf: printf("iret\n") ; break ; 
   case 0xd4:
         { 
             switch (buffer[++j])
