@@ -33,3 +33,4 @@ char *jump_near(uchar *buffer, long *j) ;
 char *jump_near_indirect(uchar *buffer, long *j) ; 
 char *jump_inter_segment(uchar *buffer, long *j) ; 
 char *jump_far(uchar *buffer, long *j) ;  
+char *call_inter_segment(uchar *buffer, long *j) ; 

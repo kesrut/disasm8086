@@ -47,6 +47,24 @@ char *jump_inter_segment(uchar *buffer, long *j)
   sprintf(var,"0x%x:0x%x", segment, offset) ; 
   return var ;   
 }
+
+char *call_inter_segment(uchar *buffer, long *j)
+{
+	memset(var, '\0', 64) ; 
+	(*j)++ ;
+	uchar low = buffer[*j] ; 
+	(*j)++ ; 
+	uchar high = buffer[*j] ; 
+	unsigned short offset = (high << 8) + low ; 
+	(*j)++ ;
+	low = buffer[*j] ; 
+	(*j)++ ; 
+	high = buffer[*j] ;  
+	unsigned short segment = (high << 8) + low ; 
+	sprintf(var,"0x%x:0x%x", segment, offset) ; 
+	return var ;   
+}
+
 int main(int argc, char **argv)
 {
   uchar *buffer ; 
@@ -105,31 +123,31 @@ void disasm(uchar *buffer, long num)
         case 0x04: printf("add al, %s\n", imm8(buffer, &j)); break ;
         case 0x05: printf("add ax, %s\n", imm16(buffer, &j)); break ;  
         case 0x06: printf("push es\n") ; break ;
-  case 0x07: printf("pop es\n") ; break ;
-  case 0x08: printf("or %s\n", rm8_r8(buffer, &j)); break ;
-  case 0x09: printf("or %s\n", rm16_r16(buffer, &j)); break ;
-  case 0x0a: printf("or %s\n", r8_rm8(buffer, &j)) ; break ;
-  case 0x0b: printf("or %s\n", r16_rm16(buffer, &j)) ; break ;
-  case 0x0c: printf("or al, %s\n", imm8(buffer, &j)); break ;
+  	    case 0x07: printf("pop es\n") ; break ;
+  	    case 0x08: printf("or %s\n", rm8_r8(buffer, &j)); break ;
+  	    case 0x09: printf("or %s\n", rm16_r16(buffer, &j)); break ;
+  	    case 0x0a: printf("or %s\n", r8_rm8(buffer, &j)) ; break ;
+  	    case 0x0b: printf("or %s\n", r16_rm16(buffer, &j)) ; break ;
+  	    case 0x0c: printf("or al, %s\n", imm8(buffer, &j)); break ;
         case 0x0d: printf("or ax, %s\n", imm16(buffer, &j)); break ;
-  case 0x0e: printf("push cs\n") ; break ; 
-  case 0x10: printf("adc %s\n", rm8_r8(buffer, &j)) ; break ;
+  	    case 0x0e: printf("push cs\n") ; break ; 
+  	    case 0x10: printf("adc %s\n", rm8_r8(buffer, &j)) ; break ;
         case 0x11: printf("adc %s\n", rm16_r16(buffer, &j)); break ;
         case 0x12: printf("adc %s\n", r8_rm8(buffer, &j)) ; break ; 
         case 0x14: printf("adc al,%s\n", imm8(buffer, &j)) ; break ; 
         case 0x13: printf("adc %s\n", r16_rm16(buffer, &j)) ; break ;
         case 0x15: printf("adc ax,%s\n", imm16(buffer, &j)) ; break ;
         case 0x16: printf("push ss\n") ; break ; 
-  case 0x17: printf("pop ss\n") ; break ; 
-  case 0x18: printf("sbb %s\n", rm8_r8(buffer, &j)); break ;
+  	    case 0x17: printf("pop ss\n") ; break ; 
+  	    case 0x18: printf("sbb %s\n", rm8_r8(buffer, &j)); break ;
         case 0x19: printf("sbb %s\n", rm16_r16(buffer, &j)); break ;
         case 0x1a: printf("sbb %s\n", r8_rm8(buffer, &j)) ; break ;
         case 0x1b: printf("sbb %s\n", r16_rm16(buffer, &j)) ; break ;
         case 0x1c: printf("sbb al, %s\n", imm8(buffer, &j)); break ;
         case 0x1d: printf("sbb ax, %s\n", imm16(buffer, &j)); break ; 
         case 0x1e: printf("push ds\n") ; break ; 
-  case 0x1f: printf("pop ds\n") ; break ; 
-  case 0x21: printf("and %s\n", rm16_r16(buffer, &j)); break ; 
+		case 0x1f: printf("pop ds\n") ; break ; 
+  	    case 0x21: printf("and %s\n", rm16_r16(buffer, &j)); break ; 
         case 0x22: printf("and %s\n", r8_rm8(buffer, &j)) ; break ;  
         case 0x23: printf("and %s\n", r16_rm16(buffer, &j)) ; break ;
         case 0x24: printf("and al,%s\n", imm8(buffer, &j)) ; break ;  
@@ -141,20 +159,20 @@ void disasm(uchar *buffer, long num)
         case 0x2b: printf("sub %s\n", r16_rm16(buffer, &j)) ; break ;
         case 0x2c: printf("sub al, %s\n", imm8(buffer, &j)); break ;
         case 0x2d: printf("sub ax, %s\n", imm16(buffer, &j)); break ;
-  case 0x2f: printf("das\n") ; break ; 
+ 	    case 0x2f: printf("das\n") ; break ; 
         case 0x31: printf("xor %s\n", rm8_r8(buffer, &j)); break ;
         case 0x32: printf("xor %s\n", rm16_r16(buffer, &j)); break ;
         case 0x33: printf("xor %s\n", r8_rm8(buffer, &j)) ; break ;
-        case 0x34: printf("xor %s\n", r16_rm16(buffer, &j)) ; break ;
-        case 0x35: printf("xor al, %s\n", imm8(buffer, &j)); break ;
-  case 0x37: printf("aaa\n") ; break ;
+        case 0x34: printf("xor al, %s\n", imm8(buffer, &j)) ; break ;
+        case 0x35: printf("xor ax, %s\n", imm16(buffer, &j)); break ;
+  	    case 0x37: printf("aaa\n") ; break ;
         case 0x38: printf("cmp %s\n", rm8_r8(buffer, &j)); break ;
         case 0x39: printf("cmp %s\n", rm16_r16(buffer, &j)); break ;
         case 0x3a: printf("cmp %s\n", r8_rm8(buffer, &j)) ; break ;
         case 0x3b: printf("cmp %s\n", r16_rm16(buffer, &j)) ; break ;
         case 0x3c: printf("cmp al, %s\n", imm8(buffer, &j)); break ;
-  case 0x3f: printf("aas\n"); break ;
-        case 0x40: printf("inc ax\n") ; break ; 
+     	case 0x3f: printf("aas\n"); break ;
+		case 0x40: printf("inc ax\n") ; break ; 
         case 0x41: printf("inc cx\n"); break  ;
         case 0x42: printf("inc dx\n") ; break ; 
         case 0x43: printf("inc bx\n"); break ; 
@@ -246,54 +264,206 @@ void disasm(uchar *buffer, long num)
               default: t=1; 
            }
         } tikrinti(t) ;  
-        case 0x88: printf("mov %s\n", rm8_r8(buffer, &j)); break ;
-  case 0x89: printf("mov %s\n", rm16_r16(buffer, &j)); break ;
-        case 0x8A: printf("mov %s\n", r8_rm8(buffer, &j)) ; break ;
-        case 0x8b: printf("mov %s\n", r16_rm16(buffer, &j)) ; break ; 
-  case 0x8c: printf("mov %s\n", rm16_sreg(buffer, &j)); break ;
-  case 0x8e: printf("mov %s\n", sreg_rm16(buffer, &j)); break ;
-  case 0x9c: printf("pushf\n") ; break ;  
-        case 0xa0: printf("mov al, %s\n", moffs(buffer, &j)) ; break ; 
-  case 0xa1: printf("mov ax, %s\n", moffs(buffer, &j)) ; break ; 
-  case 0xa2: printf("mov %s, al\n", moffs(buffer, &j)) ; break ; 
-  case 0xa3: printf("mov %s, ax\n", moffs(buffer, &j)) ; break ; 
-  case 0xb0: printf("mov al, %s\n", imm8(buffer, &j)); break ;
-  case 0xb1: printf("mov cl, %s\n", imm8(buffer, &j)); break ;
-  case 0xb2: printf("mov dl, %s\n", imm8(buffer, &j)); break ;
-  case 0xb3: printf("mov bl, %s\n", imm8(buffer, &j)); break ;
-  case 0xb4: printf("mov bh, %s\n", imm8(buffer, &j)); break ;
-  case 0xb5: printf("mov ch, %s\n", imm8(buffer, &j)); break ;
-        case 0xb6: printf("mov dh, %s\n", imm8(buffer, &j)); break ;  
-   case 0xb7: printf("mov bh, %s\n", imm8(buffer, &j)); break ;  
-  case 0xb8: printf("mov ax, %s\n", imm16(buffer, &j)); break ;
-  case 0xb9: printf("mov cx, %s\n", imm16(buffer, &j)); break ;
-  case 0xba: printf("mov dx, %s\n", imm16(buffer, &j)); break ;
-  case 0xbb: printf("mov bx, %s\n", imm16(buffer, &j)); break ;
-  case 0xbc: printf("mov sp, %s\n", imm16(buffer, &j)); break ;
-  case 0xbd: printf("mov bp, %s\n", imm16(buffer, &j)); break ;
-  case 0xbe: printf("mov si, %s\n", imm16(buffer, &j)); break ;
-  case 0xbf: printf("mov di, %s\n", imm16(buffer, &j)); break ;
-  case 0xc2: printf("ret %s\n", imm16(buffer,&j)); break ;
-  case 0xc3: printf("ret\n") ; break ; 
-  case 0xc6: printf("mov byte %s\n", rm8_imm8(buffer, &j)) ; break ; 
-  case 0xc7: printf("mov word %s\n", rm16_imm16(buffer, &j)) ; break ; 
-  case 0xca: printf("retf %s\n", imm16(buffer, &j)) ; break ; 
-  case 0xcb: printf("retf\n") ; break ; 
-  case 0xcc: printf("int3\n") ; break ;
-  case 0xcd: printf("int %s\n", imm8(buffer, &j)) ; break ; 
-  case 0xce: printf("into\n"); break ; 
-  case 0xcf: printf("iret\n") ; break ; 
-  case 0xd4:
+	case 0x84: printf("test %s\n", rm8_r8(buffer, &j)); break ; 
+	case 0x85: printf("test %s\n", rm16_r16(buffer, &j)); break ;
+	case 0x86: printf("xchg %s\n", rm8_r8(buffer, &j)); break ; 
+	case 0x87: printf("xchg %s\n", rm16_r16(buffer, &j)); break ; 
+	case 0x88: printf("mov %s\n", rm8_r8(buffer, &j)); break ;
+  	case 0x89: printf("mov %s\n", rm16_r16(buffer, &j)); break ;
+	case 0x8A: printf("mov %s\n", r8_rm8(buffer, &j)) ; break ;
+	case 0x8b: printf("mov %s\n", r16_rm16(buffer, &j)) ; break ; 
+  	case 0x8c: printf("mov %s\n", rm16_sreg(buffer, &j)); break ;
+  	case 0x8e: printf("mov %s\n", sreg_rm16(buffer, &j)); break ;
+    case 0x8f:
+		  {
+			  p = j ;  s = ((buffer[++p] & 0x38) >> 3) ;
+			  switch (s)
+			  {
+				  case 0x00:
+				  {
+					   j++ ; printf("pop %s\n", m16(buffer, &j)) ;
+				  } break ; 
+				  default: t=1; 
+			  }
+		  } tikrinti(t) ;  
+	case 0x90: printf("xchg ax, ax\n") ; break ;  		  
+	case 0x91: printf("xchg cx, ax\n") ; break ;  		  
+	case 0x92: printf("xchg dx, ax\n") ; break ;  		  
+	case 0x93: printf("xchg bx, ax\n") ; break ;  		  
+	case 0x94: printf("xchg sp, ax\n") ; break ;  		  
+	case 0x95: printf("xchg bp, ax\n") ; break ;  		  
+	case 0x96: printf("xchg si, ax\n") ; break ;  		  
+	case 0x97: printf("xchg di, ax\n") ; break ;  		  
+	case 0x98: printf("cbw\n") ; break ; 
+	case 0x99: printf("cbd\n") ; break ; 
+	case 0x9a: printf("call %s\n", call_inter_segment(buffer, &j)) ; break ;
+	case 0x9b: printf("wait\n") ; break ; 
+	case 0x9c: printf("pushf\n") ; break ;  
+	case 0x9d: printf("popf\n") ; break ;
+	case 0x9e: printf("sahf\n"); break ;
+	case 0x9f: printf("lahf\n") ; break ;	
+	case 0xa0: printf("mov al, %s\n", moffs(buffer, &j)) ; break ; 
+  	case 0xa1: printf("mov ax, %s\n", moffs(buffer, &j)) ; break ; 
+  	case 0xa2: printf("mov %s, al\n", moffs(buffer, &j)) ; break ; 
+  	case 0xa3: printf("mov %s, ax\n", moffs(buffer, &j)) ; break ; 
+  	case 0xa8: printf("test al, %s\n", imm8(buffer, &j)) ; break ; 
+	case 0xa9: printf("test ax, %s\n", imm16(buffer, &j)); break ;
+    case 0xb0: printf("mov al, %s\n", imm8(buffer, &j)); break ;
+  	case 0xb1: printf("mov cl, %s\n", imm8(buffer, &j)); break ;
+ 	case 0xb2: printf("mov dl, %s\n", imm8(buffer, &j)); break ;
+  	case 0xb3: printf("mov bl, %s\n", imm8(buffer, &j)); break ;
+  	case 0xb4: printf("mov ah, %s\n", imm8(buffer, &j)); break ;
+  	case 0xb5: printf("mov ch, %s\n", imm8(buffer, &j)); break ;
+	case 0xb6: printf("mov dh, %s\n", imm8(buffer, &j)); break ;  
+   	case 0xb7: printf("mov bh, %s\n", imm8(buffer, &j)); break ;  
+  	case 0xb8: printf("mov ax, %s\n", imm16(buffer, &j)); break ;
+  	case 0xb9: printf("mov cx, %s\n", imm16(buffer, &j)); break ;
+  	case 0xba: printf("mov dx, %s\n", imm16(buffer, &j)); break ;
+  	case 0xbb: printf("mov bx, %s\n", imm16(buffer, &j)); break ;
+  	case 0xbc: printf("mov sp, %s\n", imm16(buffer, &j)); break ;
+  	case 0xbd: printf("mov bp, %s\n", imm16(buffer, &j)); break ;
+  	case 0xbe: printf("mov si, %s\n", imm16(buffer, &j)); break ;
+  	case 0xbf: printf("mov di, %s\n", imm16(buffer, &j)); break ;
+	case 0xc0:
+	{
+		p = j ;  s = ((buffer[++p] & 0x38) >> 3) ;
+		switch (s)
+		{
+		   case 0x04:
+		   {
+			printf("sal %s\n", rm8_imm8(buffer, &j)) ;
+			} break ;
+			case 0x05:
+			{
+				printf("shr %s\n", rm8_imm8(buffer, &j)) ;
+			} break ;
+			case 0x07:
+			{
+				printf("sar %s\n", rm8_imm8(buffer, &j)) ;
+			} break ;
+		    default: t= 1 ; 
+		}  
+	} tikrinti(t) ;
+	case 0xc1:
+	{
+		p = j ;  s = ((buffer[++p] & 0x38) >> 3) ;
+		switch (s)
+		{
+			case 0x04:
+			{
+				printf("sal %s\n", rm16_imm8(buffer, &j)) ;
+			} break ;
+			case 0x05:
+			{
+				printf("shr %s\n", rm16_imm8(buffer, &j)) ;
+			} break ;
+			case 0x07:
+			{
+				printf("sar %s\n", rm16_imm8(buffer, &j)) ;
+			} break ;
+			default: t= 1 ; 
+		}  
+	} tikrinti(t) ;
+	case 0xc2: printf("ret %s\n", imm16(buffer,&j)); break ;
+  	case 0xc3: printf("ret\n") ; break ; 
+  	case 0xc6: printf("mov byte %s\n", rm8_imm8(buffer, &j)) ; break ; 
+  	case 0xc7: printf("mov word %s\n", rm16_imm16(buffer, &j)) ; break ; 
+  	case 0xca: printf("retf %s\n", imm16(buffer, &j)) ; break ; 
+  	case 0xcb: printf("retf\n") ; break ; 
+  	case 0xcc: printf("int3\n") ; break ;
+  	case 0xcd: printf("int %s\n", imm8(buffer, &j)) ; break ; 
+  	case 0xce: printf("into\n"); break ; 
+  	case 0xcf: printf("iret\n") ; break ; 
+	case 0xd0:
+	{
+		p = j ;  s = ((buffer[++p] & 0x38) >> 3) ;
+		switch (s)
+		{
+			case 0x04:
+			{
+				printf("sal %s, 1\n", rm8(buffer, &j)) ;
+			} break ;
+			case 0x05:
+			{
+				printf("shr %s, 1\n", rm8(buffer, &j)) ;
+			} break ;
+			case 0x07:
+			{
+			   printf("sar %s, 1\n", rm8(buffer, &j)) ;	
+			} break ;
+			default: t= 1 ; 
+		}  
+	 } tikrinti(t) ;
+	case 0xd1:
+	{
+		p = j ;  s = ((buffer[++p] & 0x38) >> 3) ;
+		switch (s)
+		{
+			case 0x04:
+			{
+				printf("sal %s, 1\n", rm16(buffer, &j)) ;
+			} break ;
+			case 0x05:
+			{
+				printf("shr %s, 1\n", rm16(buffer, &j)) ;
+			} break ;
+			case 0x07:
+			{
+				printf("sar %s, 1\n", rm16(buffer, &j)) ;
+			} break ;
+		default: t= 1 ; 
+		}  
+	} tikrinti(t) ;
+	case 0xd2:
+	{
+	   p = j ;  s = ((buffer[++p] & 0x38) >> 3) ;
+	   switch (s)
+	   {
+	    case 0x04:
+		{
+		  printf("sal %s, cl\n", rm8(buffer, &j)) ;
+		} break ;
+		case 0x05:
+		{
+		   printf("shr %s, cl\n", rm8(buffer, &j)) ;
+		} break ;
+		case 0x07:
+		{
+		  printf("sar %s, cl\n", rm8(buffer, &j)) ;
+		} break ;
+		default: t= 1 ; 
+	    }  
+	} tikrinti(t) ;
+	case 0xd3:
+	{
+		p = j ;  s = ((buffer[++p] & 0x38) >> 3) ;
+		switch (s)
+		{
+			case 0x04:
+			{
+			   printf("sal %s, cl\n", rm16(buffer, &j)) ;
+			} break ;
+			case 0x05:
+			{
+				printf("shr %s, cl\n", rm16(buffer, &j)) ;
+			} break ;	
+			case 0x07:
+			{
+				printf("sar %s, cl\n", rm16(buffer, &j)) ;
+			} break ;
+			default: t= 1 ; 
+		}  
+	} tikrinti(t) ;
+	case 0xd4:
         { 
-            switch (buffer[++j])
-            {
-                case 0x0a: printf("aam\n") ; break ; 
-                default: j--; t=1;  break ;
-            }
+           switch (buffer[++j])
+           {
+             case 0x0a: printf("aam\n") ; break ; 
+             default: j--; t=1;  break ;
+           }
         } tikrinti(t) ; 
         case 0xd5:
         {
-            
             switch (buffer[++j])
             {
                 case 0x0a: printf("aad\n"); break ;
@@ -305,8 +475,46 @@ void disasm(uchar *buffer, long num)
 	case 0xeb: printf("jmp short %s\n", jump_short(buffer, &j)); break ; 
  	case 0xf4: printf("hlt\n") ; break ; 
         case 0xf5: printf("cmc\n"); break ;
-        case 0xf6: printf("mul al,%s\n", imm8(buffer, &j)) ; break ;   
-        case 0xf7: printf("mul ax, %s\n", imm16(buffer, &j)); break ;  
+        case 0xf6:
+        {
+           p = j ;  s = ((buffer[++p] & 0x38) >> 3) ;
+           switch (s)
+           {
+              case 0x00:
+	      {
+  		printf("test %s\n", rm8_imm8(buffer, &j)) ;
+              } break ;
+              case 0x04:
+              {
+                printf("mul al,%s\n", imm8(buffer, &j)) ; break ; 
+              } break ;
+	      case 0x05:
+              {
+                printf("imul %s\n", rm8(buffer, &j)) ; break ; 
+              } break ;
+              default: t= 1 ; 
+          }  
+        } tikrinti(t) ;
+	case 0xf7:
+        {
+           p = j ;  s = ((buffer[++p] & 0x38) >> 3) ;
+           switch (s)
+           {
+			   case 0x00:
+			   {
+				 printf("test %s\n", rm16_imm16(buffer, &j)) ;   
+			   } break ; 
+			  case 0x04:
+              {
+		       printf("mul ax, %s\n", imm16(buffer, &j)); break ;
+              } break ;
+	          case 0x05:
+              {
+                printf("imul %s\n", rm16(buffer, &j)); break ;
+              } break ;
+              default: t=1 ; 
+          }  
+        } tikrinti(t) ;
         case 0xf8: printf("clc\n"); break ;
         case 0xfa: printf("cli\n") ; break ;
         case 0xfc: printf("cld\n") ; break ; 
