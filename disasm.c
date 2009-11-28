@@ -69,9 +69,7 @@ int main(int argc, char **argv)
 {
 	uchar *buffer ; 
 	long num ; 
-	buffer = open_file("/Users/kesrut/Desktop/test.txt", &num) ;
-	disasm(buffer, num) ;
-	/*
+	
 	if (argc > 1)
 	{
 		if (strlen(argv[1]) < 255)
@@ -79,7 +77,7 @@ int main(int argc, char **argv)
 			buffer = open_file(argv[1], &num) ;
 			disasm(buffer, num) ; 
 		}     
-	}*/
+	}
 	return 0 ;  
 }
 
