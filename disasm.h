@@ -37,3 +37,4 @@ char *call_inter_segment(uchar *buffer, long *j) ;
 char *jmp_short_byte(uchar *buffer, long *j) ; 
 char *rel16(uchar *buffer, long *j) ;
 char *rel8(uchar *buffer, long *j) ; 
+char *rm16_imm8_2(uchar *buffer, long *j) ; 
