@@ -358,18 +358,12 @@ void disasm(unsigned char *buffer, long num)
 			case 0x8B: parse("mov %s\n", r16_rm16, buffer, &j) ; break ;
 			case 0x8C: 
 			{ 
-				int error;
-				rm16_sreg(buffer, &j, &error) ;
-				if (!error) { printf("mov %s\n", rm16_sreg(buffer, &j, &error)) ; break ; }
-				else { goto print_symbol ;  }
+				parse("mov %s\n", rm16_sreg, buffer, &j) ; break ;
 			}
 			case 0x8D: parse("lea %s\n", r16_rm16, buffer, &j) ; break ;
 			case 0x8E: 
 			{
-				int error;
-				sreg_rm16(buffer, &j, &error) ;
-				if (!error) { printf("mov %s\n", sreg_rm16(buffer, &j, &error)) ; break ; }
-				else { goto print_symbol ;}
+					parse("mov %s\n", sreg_rm16, buffer, &j) ; break ;
 			}
 			case 0x8F:
 			{
@@ -407,8 +401,8 @@ void disasm(unsigned char *buffer, long num)
 			case 0xA5: parse_noop("movsw\n", buffer, &j) ; break ;
 			case 0xA6: parse_noop("cmpsb\n", buffer, &j) ; break ;
 			case 0xA7: parse_noop("cmpsw\n", buffer, &j) ; break ;
-			case 0xA8: parse("test al, %s\n", imm8, buffer, &j) ; 
-			case 0xA9: parse("test ax, %s\n", imm16, buffer, &j) ; 
+			case 0xA8: parse("test al, %s\n", imm8, buffer, &j) ; break ;
+			case 0xA9: parse("test ax, %s\n", imm16, buffer, &j) ; break ;
 			case 0xAA: parse_noop("stosb\n", buffer, &j) ; break ;
 			case 0xAB: parse_noop("stosw\n", buffer, &j) ; break ;
 			case 0xAC: parse_noop("lodsb\n", buffer, &j) ; break ;
