@@ -156,11 +156,13 @@ int parse_noop(char *s, char *buffer, int *j)
 void disasm(unsigned char *buffer, long num)
 {
 	int j = 0; 
+	int z = 0 ;
 	while (j < num)
 	{
 		unsigned int addr = j ;
 		if (segment_override == -1)
 			printf("%08X  ", addr) ;
+		z = buffer[j] ;
 		switch (buffer[j])
 		{
 			case 0x00: parse("add %s\n", rm8_r8, buffer,&j) ; break ;
@@ -648,7 +650,6 @@ char *rm8(char *buffer, int *j, int *err)
 	int error = 0 ;
 	memset(str, '\0', 255) ;
 	char *s =  rm(buffer, j, 8, &error)  ;
-	printf("%x", error) ;
 	if (error)
 	{
 		*err = 1 ;
@@ -1049,7 +1050,12 @@ char *rm(char *buffer, int *j, char type, int *error)
 			signed short disp = disp_low ; 
 			bytes++ ;
 			char sign = '+' ; 
-			if (disp < 0) sign = '-' ;
+			if (disp < 0) 
+			{
+				sign = '-' ;
+				disp = ~disp ;
+				disp++ ;
+			}
 			sprintf(disp_str, "%c0x%x", sign, disp) ; 
 		} break ;
 		case 0x02:
