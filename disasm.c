@@ -59,8 +59,10 @@ int parse(char *s, char*(*func)(char*, int*, int *), char *buffer, int *j)
 			case DS: printf("%02X", 0x3E) ;	 break ;
 		} 
 		rm_segment_override = -1 ; 
+		segment_override = -1 ;
 	}
 	char segment[20] ;
+
 	if (t == 1)
 	{
 			memset(segment, '\0', 20) ;
@@ -72,7 +74,7 @@ int parse(char *s, char*(*func)(char*, int*, int *), char *buffer, int *j)
 				case DS: sprintf(segment, "ds") ; break ;
 			}
 	}
-	if (segment_override >= 0)
+	if (segment_override >= 0 )
 	{
 		k = k - 2 ;
 		switch (segment_override)
@@ -83,6 +85,7 @@ int parse(char *s, char*(*func)(char*, int*, int *), char *buffer, int *j)
 			case DS: printf("%02X", 0x3E) ;	 break ;
 		}
 		segment_override = -1 ;
+		rm_segment_override = -1 ; 
 	}
 	for (i=0; i < bytes; i++)
 	{
@@ -142,6 +145,7 @@ int parse_noop(char *s, char *buffer, int *j)
 		}
 		printf("%s %s", segment, s ) ; 
 		segment_override = -1 ;
+		rm_segment_override = -1 ; 
 	}
 	else
 	{
