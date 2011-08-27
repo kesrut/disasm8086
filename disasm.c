@@ -1,1037 +1,1125 @@
-#include "disasm.h" 
-
-uchar var[64] ; 
-uchar rm_var[64] ; 
-
-char *jump_near(uchar *buffer, long *j)
-{
-	memset(var, '\0', 64) ; 
-	(*j)++ ; 
-	uchar low = buffer[*j] ; 
-	(*j)++ ;
-	uchar high = buffer[*j] ;
-	signed short imm = ((high << 8) + low) ; 
-	sprintf(var, "0x%x", *j+imm+1) ; 
-	return var ;
-} 
-
-char *jump_near_indirect(uchar *buffer, long *j)
-{
-	memset(var, '\0', 64) ;
-	char *s = rm(buffer, j, 16) ;
-	sprintf(var, "%s", s) ; 
-	return var ; 
-}
-
-char *jump_far(uchar *buffer, long *j)
-{
-	memset(var, '\0', 64) ;
-	char *s = rm(buffer, j, 16) ;
-	sprintf(var, "%s", s) ; 
-	return var ; 
-}
-
-char *jump_inter_segment(uchar *buffer, long *j)
-{
-	memset(var, '\0', 64) ; 
-	(*j)++ ;
-	uchar low = buffer[*j] ; 
-	(*j)++ ; 
-	uchar high = buffer[*j] ; 
-	unsigned short offset = (high << 8) + low ; 
-	(*j)++ ;
-	low = buffer[*j] ; 
-	(*j)++ ; 
-	high = buffer[*j] ;  
-	unsigned short segment = (high << 8) + low ; 
-	sprintf(var,"0x%x:0x%x", segment, offset) ; 
-	return var ;   
-}
-
-char *call_inter_segment(uchar *buffer, long *j)
-{
-	memset(var, '\0', 64) ; 
-	(*j)++ ;
-	uchar low = buffer[*j] ; 
-	(*j)++ ; 
-	uchar high = buffer[*j] ; 
-	unsigned short offset = (high << 8) + low ; 
-	(*j)++ ;
-	low = buffer[*j] ; 
-	(*j)++ ; 
-	high = buffer[*j] ;  
-	unsigned short segment = (high << 8) + low ; 
-	sprintf(var,"0x%x:0x%x", segment, offset) ; 
-	return var ;   
-}
+#include "disasm.h"
 
 int main(int argc, char **argv)
 {
-	uchar *buffer ; 
+	char *buffer; 
 	long num ; 
 	if (argc > 1)
 	{
 		if (strlen(argv[1]) < 255)
 		{
-			buffer = open_file(argv[1], &num) ;
-			disasm(buffer, num) ; 
-		}     
+			buffer = read_file(argv[1], &num) ;
+			disasm(buffer, num) ;
+		}
 	}
-	return 0 ;  
+	return 0 ;
 }
 
-uchar* open_file(char *name, long *num)
+
+char *regs16[8] = {"ax", "cx", "dx", "bx", "sp", "bp", "si", "di"} ; 
+char *regs8[8] = {"al", "cl", "dl", "bl", "ah", "ch", "dh", "bh"} ;
+char *segreg[4] = {"es", "cs", "ss", "ds"} ;
+
+enum segment_registers {ES=0, CS, SS, DS} ; 
+
+signed char segment_override = -1 ;
+ 
+int bytes = 0 ;
+int num_bytes = 0 ;
+
+int rm_segment_override = -1 ; 
+
+int parse(char *s, char*(*func)(char*, int*, int *), char *buffer, int *j)
 {
-	FILE *fp ; 
-	long f_size ; 
-	char *buffer ; 
-	fp = fopen(name, "rb") ; 
-	if (fp != NULL)
+	bytes = 1;
+	int temp_j = *j ; 
+	int error = 0 ;
+	char *result = func(buffer, j, &error) ;
+	if (error)
 	{
-		fseek(fp, 0, SEEK_END) ;
-		f_size = ftell(fp) ; 
-		*num = f_size ; 
-		rewind(fp) ;
-		buffer = (char*) malloc(sizeof(char)*f_size) ; 
-		if (buffer == NULL) { printf("Memory error!\n"); exit(1) ; }
-		long result = fread(buffer, 1, f_size, fp) ; 
-		if (result != f_size) { printf("Reading error!\n") ; exit(1) ; } 
-		return buffer ; 
+		char tmp_buffer[20] ; 
+		memset(tmp_buffer, '\0', 20) ;
+		unsigned char tmp_char = buffer[*j] ; 
+		sprintf(tmp_buffer, "db 0x%X\n", tmp_char) ;
+		parse_noop(tmp_buffer, buffer, j) ;
+		return 0 ;
+	}
+	int i=0;
+	int k = 16 ;
+	int t = 0 ;
+	if (segment_override == -1 && rm_segment_override >= 0)
+	{
+		t = 1; 
+		k = k - 2 ;
+		switch (rm_segment_override)
+		{
+			case ES: printf("%02X", 0x26) ;	 break ;
+			case CS: printf("%02X", 0x2E) ;	 break ;
+			case SS: printf("%02X", 0x36) ;	 break ;
+			case DS: printf("%02X", 0x3E) ;	 break ;
+		} 
+		rm_segment_override = -1 ; 
+	}
+	char segment[20] ;
+	if (t == 1)
+	{
+			memset(segment, '\0', 20) ;
+			switch (segment_override)
+			{
+				case ES: sprintf(segment, "es") ; break ;
+				case CS: sprintf(segment, "cs") ; break ;
+				case SS: sprintf(segment, "ss") ; break ;
+				case DS: sprintf(segment, "ds") ; break ;
+			}
+	}
+	if (segment_override >= 0)
+	{
+		k = k - 2 ;
+		switch (segment_override)
+		{
+			case ES: printf("%02X", 0x26) ;	 break ;
+			case CS: printf("%02X", 0x2E) ;	 break ;
+			case SS: printf("%02X", 0x36) ;	 break ;
+			case DS: printf("%02X", 0x3E) ;	 break ;
+		}
+		segment_override = -1 ;
+	}
+	for (i=0; i < bytes; i++)
+	{
+		unsigned char byte = buffer[temp_j+i]  ; 
+		printf("%02X", byte) ;	
+	}
+	k = (k - (bytes*2))  ; 
+	for (i=0; i < k; i++) printf(" ") ;
+	if (t == 1)
+	{
+		char tmp_string[255] ; 
+		char tmp_string2[255] ; 
+		memset(tmp_string, '\0', 255) ;
+		memset(tmp_string2, '\0', 255) ;
+		sprintf(tmp_string, s, result) ; 
+		sprintf(tmp_string2, "%s %s", segment, tmp_string) ; 
+		printf("%s", tmp_string2) ;
+	}
+	else printf(s, result) ; 
+}
+
+int get_bytes(int k, int j)
+{
+	if (k + j < num_bytes) return 0; 
+	else return 1; 
+}
+
+int parse_noop(char *s, char *buffer, int *j)
+{
+	int k = 16 ; 
+	if (segment_override >= 0) 
+	{
+			switch (segment_override)
+			{
+				case ES: printf("%02X", 0x26) ;	 break ;
+				case CS: printf("%02X", 0x2E) ;	 break ;
+				case SS: printf("%02X", 0x36) ;	 break ;
+				case DS: printf("%02X", 0x3E) ;	 break ;
+			}
+			k = k - 2 ; 
+	}
+	unsigned char tmp_char = buffer[*j] ; 
+	printf("%02X", tmp_char) ;	
+	int i= 0 ;
+	k = k - 1*2 ; 
+	for (i=0; i < k; i++) printf(" ") ;
+	if (segment_override >= 0)
+	{
+		char segment[20] ;
+		memset(segment, '\0', 20) ;
+		switch (segment_override)
+		{
+			case ES: sprintf(segment, "es") ; break ;
+			case CS: sprintf(segment, "cs") ; break ;
+			case SS: sprintf(segment, "ss") ; break ;
+			case DS: sprintf(segment, "ds") ; break ;
+		}
+		printf("%s %s", segment, s ) ; 
+		segment_override = -1 ;
 	}
 	else
 	{
-		printf("Error reading file!\n") ; 
-		exit(1) ; 
+		printf("%s", s) ; 
 	}
 }
 
-void disasm(uchar *buffer, long num)
+void disasm(unsigned char *buffer, long num)
 {
-	long j = 0, p  = 0 ;
-	uchar t = 0 ; 
-	uchar s = 0 ; 
-	int prefix = 0 ; 
-	while ( j < num)
+	int j = 0; 
+	while (j < num)
 	{
-		s = 0 ; 
-		t = 0 ; 
-		if (prefix != 1) printf("%.8x  ", (unsigned int)j) ;
-		prefix = 0 ; 
+		unsigned int addr = j ;
+		if (segment_override == -1)
+			printf("%08X  ", addr) ;
 		switch (buffer[j])
 		{
-			case 0x00: printf("add %s\n", rm8_r8(buffer, &j)); break ;
-			case 0x01: printf("add %s\n", rm16_r16(buffer, &j)); break ;
-			case 0x02: printf("add %s\n", r8_rm8(buffer, &j)) ; break ;
-			case 0x03: printf("add %s\n", r16_rm16(buffer, &j)) ; break ;  
-			case 0x04: printf("add al,%s\n", imm8(buffer, &j)); break ;
-			case 0x05: printf("add ax,%s\n", imm16(buffer, &j)); break ;  
-			case 0x06: printf("push es\n") ; break ;
-			case 0x07: printf("pop es\n") ; break ;
-			case 0x08: printf("or %s\n", rm8_r8(buffer, &j)); break ;
-			case 0x09: printf("or %s\n", rm16_r16(buffer, &j)); break ;
-			case 0x0a: printf("or %s\n", r8_rm8(buffer, &j)) ; break ;
-			case 0x0b: printf("or %s\n", r16_rm16(buffer, &j)) ; break ;
-			case 0x0c: printf("or al,%s\n", imm8(buffer, &j)); break ;
-			case 0x0d: printf("or ax,%s\n", imm16(buffer, &j)); break ;
-			case 0x0e: printf("push cs\n") ; break ; 
-			case 0x10: printf("adc %s\n", rm8_r8(buffer, &j)) ; break ;
-			case 0x11: printf("adc %s\n", rm16_r16(buffer, &j)); break ;
-			case 0x12: printf("adc %s\n", r8_rm8(buffer, &j)) ; break ; 
-			case 0x14: printf("adc al,%s\n", imm8(buffer, &j)) ; break ; 
-			case 0x13: printf("adc %s\n", r16_rm16(buffer, &j)) ; break ;
-			case 0x15: printf("adc ax,%s\n", imm16(buffer, &j)) ; break ;
-			case 0x16: printf("push ss\n") ; break ; 
-			case 0x17: printf("pop ss\n") ; break ; 
-			case 0x18: printf("sbb %s\n", rm8_r8(buffer, &j)); break ;
-			case 0x19: printf("sbb %s\n", rm16_r16(buffer, &j)); break ;
-			case 0x1a: printf("sbb %s\n", r8_rm8(buffer, &j)) ; break ;
-			case 0x1b: printf("sbb %s\n", r16_rm16(buffer, &j)) ; break ;
-			case 0x1c: printf("sbb al,%s\n", imm8(buffer, &j)); break ;
-			case 0x1d: printf("sbb ax,%s\n", imm16(buffer, &j)); break ; 
-			case 0x1e: printf("push ds\n") ; break ; 
-			case 0x1f: printf("pop ds\n") ; break ; 
-			case 0x20: printf("and %s\n", rm8_r8(buffer, &j)) ; break ; 
-			case 0x21: printf("and %s\n", rm16_r16(buffer, &j)); break ; 
-			case 0x22: printf("and %s\n", r8_rm8(buffer, &j)) ; break ;  
-			case 0x23: printf("and %s\n", r16_rm16(buffer, &j)) ; break ;
-			case 0x24: printf("and al,%s\n", imm8(buffer, &j)) ; break ;  
-			case 0x25: printf("and ax,%s\n", imm16(buffer, &j)); break ;  
-			case 0x27: printf("daa\n"); break ;
-			case 0x28: printf("sub %s\n", rm8_r8(buffer, &j)); break ;
-			case 0x29: printf("sub %s\n", rm16_r16(buffer, &j)); break ;
-			case 0x2a: printf("sub %s\n", r8_rm8(buffer, &j)) ; break ;
-			case 0x2b: printf("sub %s\n", r16_rm16(buffer, &j)) ; break ;
-			case 0x2c: printf("sub al,%s\n", imm8(buffer, &j)); break ;
-			case 0x2d: printf("sub ax,%s\n", imm16(buffer, &j)); break ;
-			case 0x2f: printf("das\n") ; break ; 
-			case 0x30: printf("xor %s\n", rm8_r8(buffer, &j)); break ;
-			case 0x31: printf("xor %s\n", rm16_r16(buffer, &j)); break ;
-			case 0x32: printf("xor %s\n", r8_rm8(buffer, &j)) ; break ;
-			case 0x33: printf("xor %s\n", r16_rm16(buffer, &j)) ; break ;
-			case 0x34: printf("xor al,%s\n", imm8(buffer, &j)) ; break ;
-			case 0x35: printf("xor ax,%s\n", imm16(buffer, &j)); break ;
-			case 0x37: printf("aaa\n") ; break ;
-			case 0x38: printf("cmp %s\n", rm8_r8(buffer, &j)); break ;
-			case 0x39: printf("cmp %s\n", rm16_r16(buffer, &j)); break ;
-			case 0x3a: printf("cmp %s\n", r8_rm8(buffer, &j)) ; break ;
-			case 0x3b: printf("cmp %s\n", r16_rm16(buffer, &j)) ; break ;
-			case 0x3c: printf("cmp al,%s\n", imm8(buffer, &j)); break ;
-			case 0x3d: printf("cmp ax,%s\n", imm16(buffer, &j)) ; break ;
-			case 0x3f: printf("aas\n"); break ;
-			case 0x40: printf("inc ax\n") ; break ; 
-			case 0x41: printf("inc cx\n"); break  ;
-			case 0x42: printf("inc dx\n") ; break ; 
-			case 0x43: printf("inc bx\n"); break ; 
-			case 0x44: printf("inc sp\n"); break ;
-			case 0x45: printf("inc bp\n"); break ; 
-			case 0x46: printf("inc si\n"); break ;
-			case 0x47: printf("inc di\n") ; break ;
-			case 0x48: printf("dec ax\n") ; break ; 
-			case 0x49: printf("dec cx\n"); break ;
-			case 0x4a: printf("dec dx\n"); break ;
-			case 0x4b: printf("dec bx\n"); break ; 
-			case 0x4c: printf("dec sp\n"); break ;
-			case 0x4d: printf("dec bp\n"); break ;
-			case 0x4e: printf("dec si\n") ; break ;
-			case 0x4f: printf("dec di\n"); break ; 
-			case 0x50: printf("push ax\n"); break ;
-			case 0x51: printf("push cx\n") ; break ;
-			case 0x52: printf("push dx\n"); break ;
-			case 0x53: printf("push bx\n"); break ;
-			case 0x54: printf("push sp\n"); break ;
-			case 0x55: printf("push bp\n"); break ; 
-			case 0x56: printf("push si\n"); break ;
-			case 0x57: printf("push di\n"); break ;
-			case 0x58: printf("pop ax\n"); break ;
-			case 0x59: printf("pop cx\n") ; break ;
-			case 0x5a: printf("pop dx\n"); break ;
-			case 0x5b: printf("pop bx\n"); break ; 
-			case 0x5c: printf("pop sp\n"); break ;
-			case 0x5d: printf("pop bp\n") ; break ;
-			case 0x5e: printf("pop si\n") ; break ;
-			case 0x5f: printf("pop di\n"); break ;
-			case 0x70: printf("jo %s\n", rel8(buffer, &j)); break ;
-			case 0x71: printf("jno %s\n", rel8(buffer, &j)); break ; 
-			case 0x72: printf("jc %s\n", rel8(buffer, &j)) ; break ;  
-			case 0x73: printf("jnc %s\n", rel8(buffer, &j)) ; break ;
-			case 0x74: printf("jz %s\n", rel8(buffer, &j)) ; break ;
-			case 0x75: printf("jnz %s\n", rel8(buffer, &j)) ; break ; 
-			case 0x76: printf("jna %s\n", rel8(buffer, &j)) ; break ;
-			case 0x77: printf("ja %s\n", rel8(buffer, &j)) ; break ; 
-			case 0x78: printf("js %s\n", rel8(buffer, &j)) ; break ;
-			case 0x79: printf("jns %s\n", rel8(buffer, &j)) ; break ; 
-			case 0x7a: printf("jpe %s\n", rel8(buffer, &j)); break ;
-			case 0x7b: printf("jpo %s\n", rel8(buffer, &j)) ; break ; 
-			case 0x7c: printf("jl %s\n", rel8(buffer, &j)) ; break ; 
-			case 0x7d: printf("jnl %s\n", rel8(buffer, &j)) ; break ;
-			case 0x7f: printf("jg %s\n", rel8(buffer, &j)) ; break ; 
+			case 0x00: parse("add %s\n", rm8_r8, buffer,&j) ; break ;
+			case 0x01: parse("add %s\n", rm16_r16,buffer, &j) ; break ;
+			case 0x02: parse("add %s\n", r8_rm8, buffer, &j) ; break ;
+			case 0x03: parse("add %s\n", r16_rm16, buffer, &j) ; break ;
+			case 0x04: parse("add al,%s\n", imm8, buffer, &j) ; break ; 
+			case 0x05: parse("add ax,%s\n", imm16, buffer, &j) ; break ;
+			case 0x06: parse_noop("push es\n", buffer, &j); break ; 
+			case 0x07: parse_noop("pop es\n", buffer, &j); break ;
+			case 0x08: parse("or %s\n", rm8_r8, buffer,&j) ; break ;
+			case 0x09: parse("or %s\n", rm16_r16, buffer, &j) ; break ;
+			case 0x0A: parse("or %s\n", r8_rm8, buffer, &j) ; break ;
+			case 0x0B: parse("or %s\n", r16_rm16, buffer, &j) ; break ;
+			case 0x0C: parse("or al,%s\n", imm8, buffer, &j) ; break ; 
+			case 0x0D: parse("or ax,%s\n", imm16, buffer, &j) ; break ;
+			case 0x0E: parse_noop("push cs\n", buffer, &j) ; break ;
+			case 0x10: parse("adc %s\n", rm8_r8, buffer,&j) ; break ;
+			case 0x11: parse("adc %s\n", rm16_r16, buffer, &j) ; break ;
+			case 0x12: parse("adc %s\n", r8_rm8, buffer, &j) ; break ;
+			case 0x13: parse("adc %s\n", r16_rm16, buffer, &j) ; break ;
+			case 0x14: parse("adc al,%s\n", imm8, buffer, &j) ; break ; 
+			case 0x15: parse("adc ax,%s\n", imm16, buffer, &j) ; break ;
+			case 0x16: parse_noop("push ss\n", buffer, &j) ; break ;
+			case 0x17: parse_noop("pop ss\n", buffer, &j) ; break ;
+			case 0x18: parse("sbb %s\n", rm8_r8, buffer,&j) ; break ;
+			case 0x19: parse("sbb %s\n", rm16_r16, buffer, &j) ; break ;
+			case 0x1A: parse("sbb %s\n", r8_rm8, buffer, &j) ; break ;
+			case 0x1B: parse("sbb %s\n", r16_rm16, buffer, &j) ; break ;
+			case 0x1C: parse("sbb al,%s\n", imm8, buffer, &j) ; break ; 
+			case 0x1D: parse("sbb ax,%s\n", imm16, buffer, &j) ; break ;
+			case 0x1E: parse_noop("push ds\n", buffer, &j) ; break ;
+			case 0x1F: parse_noop("pop ds\n", buffer, &j) ; break ;
+			case 0x20: parse("and %s\n", rm8_r8, buffer, &j) ; break ;
+			case 0x21: parse("and %s\n", rm16_r16, buffer, &j) ; break ;
+			case 0x22: parse("and %s\n", r8_rm8, buffer, &j) ; break ;
+			case 0x23: parse("and %s\n", r16_rm16, buffer, &j) ; break ;
+			case 0x24: parse("and al,%s\n", imm8, buffer, &j) ; break ; 
+			case 0x25: parse("and ax,%s\n", imm16, buffer, &j) ; break ;
+			case 0x26: 
+			{
+				segment_override = ES ; 
+				rm_segment_override = ES;
+			}
+			break ;
+			case 0x27: parse_noop("daa\n", buffer, &j) ; break ;
+			case 0x28: parse("sub %s\n", rm8_r8, buffer, &j) ; break ;
+			case 0x29: parse("sub %s\n", rm16_r16, buffer, &j) ; break ;
+			case 0x2A: parse("sub %s\n", r8_rm8, buffer, &j) ; break ;
+			case 0x2B: parse("sub %s\n", r16_rm16, buffer, &j) ; break ;
+			case 0x2C: parse("sub al,%s\n", imm8, buffer, &j) ; break ; 
+			case 0x2D: parse("sub ax,%s\n", imm16, buffer, &j) ; break ;
+			case 0x2E: 
+			{
+				segment_override = CS ; 
+				rm_segment_override = CS ;
+			} break ;
+			case 0x2F: parse_noop("das\n", buffer, &j) ; break ;
+			case 0x30: parse("xor %s\n", rm8_r8, buffer,&j) ; break ;
+			case 0x31: parse("xor %s\n", rm16_r16, buffer, &j) ; break ;
+			case 0x32: parse("xor %s\n", r8_rm8, buffer, &j) ; break ;
+			case 0x33: parse("xor %s\n", r16_rm16, buffer, &j) ; break ;
+			case 0x34: parse("xor al,%s\n", imm8, buffer, &j) ; break ; 
+			case 0x35: parse("xor ax,%s\n", imm16, buffer, &j) ; break ;
+			case 0x36: 
+			{
+				segment_override = SS ; 
+				rm_segment_override = SS ; 
+			} break ;
+			case 0x37: parse_noop("aaa\n", buffer, &j) ; break ;
+			case 0x38: parse("cmp %s\n", rm8_r8, buffer,&j) ; break ;
+			case 0x39: parse("cmp %s\n", rm16_r16, buffer, &j) ; break ;
+			case 0x3A: parse("cmp %s\n", r8_rm8, buffer, &j) ; break ;
+			case 0x3B: parse("cmp %s\n", r16_rm16, buffer, &j) ; break ;
+			case 0x3C: parse("cmp al,%s\n", imm8, buffer, &j) ; break ; 
+			case 0x3D: parse("cmp ax,%s\n", imm16, buffer, &j) ; break ;
+			case 0x3E: 
+			{
+				segment_override = DS ; 
+				rm_segment_override = DS ; 
+			}
+			break ;
+			case 0x3F: parse_noop("ass\n", buffer, &j) ; break ;
+			case 0x40: parse_noop("inc ax\n", buffer, &j) ; break ;
+			case 0x41: parse_noop("inc cx\n", buffer, &j) ; break ;
+			case 0x42: parse_noop("inc dx\n", buffer, &j) ; break ;
+			case 0x43: parse_noop("inc bx\n", buffer, &j) ; break ;
+			case 0x44: parse_noop("inc sp\n", buffer, &j) ; break ;
+			case 0x45: parse_noop("inc bp\n", buffer, &j) ; break ;
+			case 0x46: parse_noop("inc si\n", buffer, &j) ; break ;
+			case 0x47: parse_noop("inc di\n", buffer, &j) ; break ;
+			case 0x48: parse_noop("dec ax\n", buffer, &j) ; break ;
+			case 0x49: parse_noop("dec cx\n", buffer, &j) ; break ;
+			case 0x4A: parse_noop("dec dx\n", buffer, &j) ; break ;
+			case 0x4B: parse_noop("dec bx\n", buffer, &j) ; break ;
+			case 0x4C: parse_noop("dec sp\n", buffer, &j) ; break ;
+			case 0x4D: parse_noop("dec bp\n", buffer, &j) ; break ;
+			case 0x4E: parse_noop("dec si\n", buffer, &j) ; break ;
+			case 0x4F: parse_noop("dec di\n", buffer, &j) ; break ;
+			case 0x50: parse_noop("push ax\n", buffer, &j) ; break ;
+			case 0x51: parse_noop("push cx\n", buffer, &j) ; break ;
+			case 0x52: parse_noop("push dx\n", buffer, &j) ; break ;
+			case 0x53: parse_noop("push bx\n", buffer, &j) ; break ;
+			case 0x54: parse_noop("push sp\n", buffer, &j) ; break ;
+			case 0x55: parse_noop("push bp\n", buffer, &j) ; break ;
+			case 0x56: parse_noop("push si\n", buffer, &j) ; break ;
+			case 0x57: parse_noop("push di\n", buffer, &j) ; break ;
+			case 0x58: parse_noop("pop ax\n", buffer, &j) ; break ;
+			case 0x59: parse_noop("pop cx\n", buffer, &j) ; break ;
+			case 0x5A: parse_noop("pop dx\n", buffer, &j) ; break ;
+			case 0x5B: parse_noop("pop bx\n", buffer, &j) ; break ;
+			case 0x5C: parse_noop("pop sp\n", buffer, &j) ; break ;
+			case 0x5D: parse_noop("pop bp\n", buffer, &j) ; break ;
+			case 0x5E: parse_noop("pop si\n", buffer, &j) ; break ;
+			case 0x5F: parse_noop("pop di\n", buffer, &j) ; break ;
+			case 0x70: parse("jo %s\n", rel8, buffer, &j) ; break ;
+			case 0x71: parse("jno %s\n", rel8, buffer, &j) ; break ;
+			case 0x72: parse("jc %s\n", rel8, buffer, &j) ; break ;
+			case 0x73: parse("jnc %s\n", rel8, buffer, &j) ; break ;
+			case 0x74: parse("jz %s\n", rel8, buffer, &j) ; break ;
+			case 0x75: parse("jnz %s\n", rel8, buffer, &j) ; break ;
+			case 0x76: parse("jna %s\n", rel8, buffer, &j) ; break ;
+			case 0x77: parse("ja %s\n", rel8, buffer, &j) ; break ;
+			case 0x78: parse("js %s\n", rel8, buffer, &j) ; break ;
+			case 0x79: parse("jns %s\n", rel8, buffer, &j) ; break ;
+			case 0x7A: parse("jpe %s\n", rel8, buffer, &j) ; break ;
+			case 0x7B: parse("jpo %s\n", rel8, buffer, &j) ; break ;
+			case 0x7C: parse("jl %s\n", rel8, buffer, &j) ; break ;
+			case 0x7D: parse("jnl %s\n", rel8, buffer, &j) ; break ;
+			case 0x7E: parse("jng %s\n", rel8, buffer, &j) ; break ;
+			case 0x7F: parse("jg %s\n", rel8, buffer, &j) ; break ;
 			case 0x80:
-			{ 
-				p = j ; s = ((buffer[++p] & 0x38) >> 3) ;
-				switch (s)
+			{
+				unsigned char opcode = ((buffer[++j] & 0x38) >> 3 ); 
+				j-- ; 
+				unsigned char t = 0 ;
+				switch (opcode)
 				{
-					case 0x00:
-					{
-						printf("add %s\n", rm8_imm8(buffer, &j)) ; 
-					} break ;
-					case 0x01:
-					{
-						printf("or %s\n", rm8_imm8(buffer, &j)) ; 
-					} break ; 
-					case 0x02:
-					{
-						printf("adc %s\n",  rm8_imm8(buffer, &j)) ; 
-					} break ; 
-					case 0x04:
-					{
-						printf("and %s\n",  rm8_imm8(buffer, &j)) ; 
-					} break ; 
-					case 0x07:
-				    {
-						printf("cmp %s\n", rm8_imm8(buffer, &j));
-					} break ; 
-					default: t=1 ; 
-				}  
-			if (t == 1) { printf("db 0x%x\n", buffer[j]); break; }
-			} tikrinti(t) ; 
+					case 0x00: parse("add %s\n", rm8_imm8, buffer, &j) ; break ;
+					case 0x01: parse("or %s\n", rm8_imm8, buffer, &j) ; break ;
+					case 0x02: parse("adc %s\n", rm8_imm8, buffer, &j) ; break ;
+					case 0x03: parse("sbb %s\n", rm8_imm8, buffer, &j) ; break ;
+					case 0x04: parse("and %s\n", rm8_imm8, buffer, &j) ; break ;
+					case 0x05: parse("sub %s\n", rm8_imm8, buffer, &j) ; break ;
+					case 0x06: parse("xor %s\n", rm8_imm8, buffer, &j) ; break ;
+					case 0x07: parse("cmp %s\n", rm8_imm8, buffer, &j) ; break ;
+					default: t = 1; break ;
+				}
+				if (t) goto print_symbol ;
+			} break ;
 			case 0x81:
 			{
-				p = j ; s = ((buffer[++p] & 0x38) >> 3) ;
-				switch (s)
+				unsigned char opcode = ((buffer[++j] & 0x38) >> 3 ); 
+				j-- ; 
+				unsigned char t = 0 ;
+				switch (opcode)
 				{
-					case 0x00:
-					{
-						printf("add %s\n", rm16_imm16(buffer, &j)) ; 
-					} break ; 
-					case 0x01:
-					{
-						printf("or %s\n", rm16_imm16(buffer, &j)) ; 
-					} break ;
-					case 0x02:
-					{
-						printf("adc %s\n",  rm16_imm16(buffer, &j)) ; 
-					} break ; 
-					case 0x04:
-					{
-						printf("and %s\n",  rm16_imm16(buffer, &j)) ; 
-					} break ; 
-					case 0x07:
-					{
-						printf("cmp %s\n", rm16_imm16(buffer, &j)) ; 
-					} break ; 
-					default: t=1; 
-					
+					case 0x00: parse("add %s\n", rm16_imm16, buffer, &j) ; break ;
+					case 0x01: parse("or %s\n", rm16_imm16, buffer, &j) ; break ;
+					case 0x02: parse("adc %s\n", rm16_imm16, buffer, &j) ; break ;
+					case 0x03: parse("sbb %s\n", rm16_imm16, buffer, &j) ; break ;
+					case 0x04: parse("and %s\n", rm16_imm16, buffer, &j) ; break ;
+					case 0x05: parse("sub %s\n", rm16_imm16, buffer, &j) ; break ;
+					case 0x06: parse("xor %s\n", rm16_imm16, buffer, &j) ; break ;
+					case 0x07: parse("cmp %s\n", rm16_imm16, buffer, &j) ; break ;
+					default: t = 1; break ;
 				}
-				if (t == 1) { printf("db 0x%x\n", buffer[j]); break; }
-			} tikrinti(t) ;  
+				if (t) goto print_symbol ;
+			} break ;
 			case 0x83:
 			{
-				p = j ;  s = ((buffer[++p] & 0x38) >> 3) ;
-				switch (s)
+				unsigned char opcode = ((buffer[++j] & 0x38) >> 3 ); 
+				j-- ;
+				unsigned char t = 0 ;
+				switch (opcode)
 				{
-					case 0x00:
-					{
-						printf("add %s\n",  rm16_imm8(buffer, &j)) ; 
-					} break ; 
-					case 0x01:
-					{
-						printf("or %s\n", rm16_imm8(buffer, &j)) ; 
-					} break ;
-					case 0x02:
-					{
-						printf("adc %s\n",  rm16_imm8(buffer, &j)) ; 
-					} break ; 
-					case 0x04:
-					{
-						printf("and %s\n",  rm16_imm8(buffer, &j)) ; 
-					} break ; 
-					case 0x07:
-					{
-						printf("cmp %s\n", rm16_imm8(buffer, &j)) ; 
-					} break ;
-					default: t=1;
-				}
-				if (t == 1) { printf("db 0x%x\n", buffer[j]); break; }
-			} tikrinti(t) ;  
-			case 0x84: printf("test %s\n", rm8_r8(buffer, &j)); break ; 
-			case 0x85: printf("test %s\n", rm16_r16(buffer, &j)); break ;
-			case 0x86: printf("xchg %s\n", rm8_r8(buffer, &j)); break ; 
-			case 0x87: printf("xchg %s\n", rm16_r16(buffer, &j)); break ; 
-			case 0x88: printf("mov %s\n", rm8_r8(buffer, &j)); break ;
-			case 0x89: printf("mov %s\n", rm16_r16(buffer, &j)); break ;
-			case 0x8A: printf("mov %s\n", r8_rm8(buffer, &j)) ; break ;
-			case 0x8b: printf("mov %s\n", r16_rm16(buffer, &j)) ; break ; 
-			case 0x8c: printf("mov %s\n", rm16_sreg(buffer, &j)); break ;
-			case 0x8e: printf("mov %s\n", sreg_rm16(buffer, &j)); break ;
-			case 0x8f:
-			{
-				p = j ;  s = ((buffer[++p] & 0x38) >> 3) ;
-				switch (s)
-				{
-					case 0x00:
-					{
-						j++ ; printf("pop %s\n", m16(buffer, &j)) ;
-					} break ; 
-					default: t=1; 
-				}
-				if (t == 1) { printf("db 0x%x\n", buffer[j]); break; }
-			} tikrinti(t) ;  
-			case 0x90: printf("xchg ax,ax\n") ; break ;  		  
-			case 0x91: printf("xchg cx,ax\n") ; break ;  		  
-			case 0x92: printf("xchg dx,ax\n") ; break ;  		  
-			case 0x93: printf("xchg bx,ax\n") ; break ;  		  
-			case 0x94: printf("xchg sp,ax\n") ; break ;  		  
-			case 0x95: printf("xchg bp,ax\n") ; break ;  		  
-			case 0x96: printf("xchg si,ax\n") ; break ;  		  
-			case 0x97: printf("xchg di,ax\n") ; break ;  		  
-			case 0x98: printf("cbw\n") ; break ; 
-			case 0x99: printf("cbd\n") ; break ; 
-			case 0x9a: printf("call %s\n", call_inter_segment(buffer, &j)) ; break ;
-			case 0x9b: printf("wait\n") ; break ; 
-			case 0x9c: printf("pushf\n") ; break ;  
-			case 0x9d: printf("popf\n") ; break ;
-			case 0x9e: printf("sahf\n"); break ;
-			case 0x9f: printf("lahf\n") ; break ;	
-			case 0xa0: printf("mov al,%s\n", moffs(buffer, &j)) ; break ; 
-			case 0xa1: printf("mov ax,%s\n", moffs(buffer, &j)) ; break ; 
-			case 0xa2: printf("mov %s,al\n", moffs(buffer, &j)) ; break ; 
-			case 0xa3: printf("mov %s,ax\n", moffs(buffer, &j)) ; break ; 
-			case 0xa4: printf("movsb\n"); break ; 
-			case 0xa5: printf("movsw\n") ; break ; 
-			case 0xa6: printf("cmpsb\n") ; break ; 
-			case 0xa7: printf("cmpsw\n") ; break ;
-			case 0xa8: printf("test al,%s\n", imm8(buffer, &j)) ; break ; 
-			case 0xa9: printf("test ax,%s\n", imm16(buffer, &j)); break ;
-			case 0xaa: printf("stosb\n") ; break ; 
-			case 0xab: printf("stosw\n") ; break ; 
-			case 0xac: printf("lodsb\n") ; break ;
-			case 0xad: printf("lodsw\n") ; break ; 
-			case 0xae: printf("scasb\n") ; break ; 
-			case 0xaf: printf("scasw\n") ; break ; 
-			case 0xb0: printf("mov al,%s\n", imm8(buffer, &j)); break ;
-			case 0xb1: printf("mov cl,%s\n", imm8(buffer, &j)); break ;
-			case 0xb2: printf("mov dl,%s\n", imm8(buffer, &j)); break ;
-			case 0xb3: printf("mov bl,%s\n", imm8(buffer, &j)); break ;
-			case 0xb4: printf("mov ah,%s\n", imm8(buffer, &j)); break ;
-			case 0xb5: printf("mov ch,%s\n", imm8(buffer, &j)); break ;
-			case 0xb6: printf("mov dh,%s\n", imm8(buffer, &j)); break ;  
-			case 0xb7: printf("mov bh,%s\n", imm8(buffer, &j)); break ;  
-			case 0xb8: printf("mov ax,%s\n", imm16(buffer, &j)); break ;
-			case 0xb9: printf("mov cx,%s\n", imm16(buffer, &j)); break ;
-			case 0xba: printf("mov dx,%s\n", imm16(buffer, &j)); break ;
-			case 0xbb: printf("mov bx,%s\n", imm16(buffer, &j)); break ;
-			case 0xbc: printf("mov sp,%s\n", imm16(buffer, &j)); break ;
-			case 0xbd: printf("mov bp,%s\n", imm16(buffer, &j)); break ;
-			case 0xbe: printf("mov si,%s\n", imm16(buffer, &j)); break ;
-			case 0xbf: printf("mov di,%s\n", imm16(buffer, &j)); break ;
-			case 0xc0:
-			{ 
-				p = j ;  s = ((buffer[++p] & 0x38) >> 3) ;
-				switch (s)
-				{
-					case 0x00:
-					{
-						printf("rol byte %s\n", rm8_imm8(buffer, &j)) ;
-					} break ;						
-					case 0x01:
-					{
-						printf("ror byte %s\n", rm8_imm8(buffer, &j)) ;
-					} break ;
-					case 0x02:
-					{
-						printf("rcl byte %s\n", rm8_imm8(buffer, &j)) ;
-					} break ;
-					case 0x04:
-					{
-						printf("shl byte %s\n", rm8_imm8(buffer, &j)) ;
-					} break ;
-					case 0x05:
-					{
-						printf("shr byte %s\n", rm8_imm8(buffer, &j)) ;
-					} break ;
-					case 0x07:
-					{
-						printf("sar byte %s\n", rm8_imm8(buffer, &j)) ;
-					} break ;
-					default: t= 1 ; 
-				}  
-				if (t == 1) { printf("db 0x%x\n", buffer[j]); break; }
-			} tikrinti(t) ;
-			case 0xc1:
-			{
-				p = j ;  s = ((buffer[++p] & 0x38) >> 3) ;
-				switch (s)
-				{
-					case 0x00:
-					{
-						printf("rol word %s\n", rm16_imm8_2(buffer, &j)) ;
-					} break ; 	
-					case 0x01:
-					{
-						printf("ror word %s\n", rm16_imm8_2(buffer, &j)) ;
-					} break ; 
-					case 0x02:
-					{
-						printf("rcl word %s\n", rm16_imm8_2(buffer, &j)) ;
-					} break ; 
-					case 0x04:
-					{
-						printf("shl word %s\n", rm16_imm8_2(buffer, &j)) ;
-					} break ;
-					case 0x05:
-					{
-						printf("shr word %s\n", rm16_imm8_2(buffer, &j)) ;
-					} break ;
-					case 0x07:
-					{
-						printf("sar word %s\n", rm16_imm8(buffer, &j)) ;
-					} break ;
-					default: t= 1 ; 
-				}  
-				if (t == 1) { printf("db 0x%x\n", buffer[j]); break; }
-			} tikrinti(t) ;
-			case 0xc2: printf("ret %s\n", imm16(buffer,&j)); break ;
-			case 0xc3: printf("ret\n") ; break ; 
-			case 0xc6: printf("mov byte %s\n", rm8_imm8(buffer, &j)) ; break ; 
-			case 0xc7: printf("mov word %s\n", rm16_imm16(buffer, &j)) ; break ; 
-			case 0xca: printf("retf %s\n", imm16(buffer, &j)) ; break ; 
-			case 0xcb: printf("retf\n") ; break ; 
-			case 0xcc: printf("int3\n") ; break ;
-			case 0xcd: printf("int %s\n", imm8(buffer, &j)) ; break ; 
-			case 0xce: printf("into\n"); break ; 
-			case 0xcf: printf("iret\n") ; break ; 
-			case 0xd0:
-			{
-				p = j ;  s = ((buffer[++p] & 0x38) >> 3) ;
-				switch (s)
-				{
-					case 0x00:
-					{
-						printf("rol %s,1\n", rm8(buffer, &j)) ;
-					} break ;
-					case 0x04:
-					{
-						printf("shl %s,1\n", rm8(buffer, &j)) ;
-					} break ;
-					case 0x05:
-					{
-						printf("shr %s,1\n", rm8(buffer, &j)) ;
-					} break ;
-					case 0x07:
-					{
-						printf("sar %s,1\n", rm8(buffer, &j)) ;	
-					} break ;
-					default: t= 1 ; 
-				}  
-				if (t == 1) { printf("db 0x%x\n", buffer[j]); break; }
-			} tikrinti(t) ;
-			case 0xd1:
-			{
-				p = j ;  s = ((buffer[++p] & 0x38) >> 3) ;
-				switch (s)
-				{
-					case 0x00:
-					{
-						printf("rol %s,1\n", rm16(buffer, &j)) ;
-					} break ;
-					case 0x04:
-					{
-						printf("shl %s,1\n", rm16(buffer, &j)) ;
-					} break ;
-					case 0x05:
-					{
-						printf("shr %s,1\n", rm16(buffer, &j)) ;
-					} break ;
-					case 0x07:
-					{
-						printf("sar %s,1\n", rm16(buffer, &j)) ;
-					} break ;
-					default: t= 1 ; 
-				}  
-				if (t == 1) { printf("db 0x%x\n", buffer[j]); break; }
-			} tikrinti(t) ;
-			case 0xd2:
-			{
-				p = j ;  s = ((buffer[++p] & 0x38) >> 3) ;
-				switch (s)
-				{
-					case 0x00:
-					{
-						printf("rol %s,cl\n", rm8(buffer, &j)) ;
-					} break ;	
-					case 0x04:
-					{
-						printf("shl %s,cl\n", rm8(buffer, &j)) ;
-					} break ;
-					case 0x05:
-					{
-						printf("shr %s,cl\n", rm8(buffer, &j)) ;
-					} break ;
-					case 0x07:
-					{
-						printf("sar %s,cl\n", rm8(buffer, &j)) ;
-					} break ;
-					default: t= 1 ; 
-				}  
-				if (t == 1) { printf("db 0x%x\n", buffer[j]); break; }
-			} tikrinti(t) ;
-			case 0xd3:
-			{
-				p = j ;  s = ((buffer[++p] & 0x38) >> 3) ;
-				switch (s)
-				{
-					case 0x00:
-					{
-						printf("rol %s,cl\n", rm16(buffer, &j)) ;
-					} break ;	
-					case 0x04:
-					{
-						printf("shl %s,cl\n", rm16(buffer, &j)) ;
-					} break ;
-					case 0x05:
-					{
-						printf("shr %s,cl\n", rm16(buffer, &j)) ;
-					} break ;	
-					case 0x07:
-					{
-						printf("sar %s,cl\n", rm16(buffer, &j)) ;
-					} break ;
-					default: t= 1 ; 
-				}  
-				if (t == 1) { printf("db 0x%x\n", buffer[j]); break; }
-			} tikrinti(t) ;
-			case 0xd4:
-			{ 
-				
-				switch (buffer[++j])
-				{
-					case 0x0a: printf("aam\n") ; break ; 
-					default: j--; t=1;  break ;
-				}
-				if (t == 1) { printf("db 0x%x\n", buffer[j]); break; }
-			} tikrinti(t) ; 
-			case 0xd5:
-			{
-				switch (buffer[++j])
-				{
-					case 0x0a: printf("aad\n"); break ;
-					default: j-- ; t=1 ;  break ; 
-				}
-				if (t == 1) { printf("db 0x%x\n", buffer[j]); break; }
-			} tikrinti(t) ;
-			case 0xe0: printf("loopne %s\n", rel8(buffer, &j)) ; break ;
-			case 0xe1: printf("loopz %s\n", rel8(buffer, &j)) ; break;
-			case 0xe2: printf("loop %s\n", rel8(buffer, &j)) ; break ;
-			case 0xe3: printf("jcxz %s\n", rel8(buffer, &j)) ; break ; 
-			case 0xe4: printf("in al,%s\n", imm8(buffer, &j)); break ; 
-			case 0xe5: printf("in ax,%s\n", imm8(buffer, &j)) ; break ; 
-			case 0xe6: printf("out %s,al\n", imm8(buffer, &j)) ; break ; 
-			case 0xe7: printf("out %s,ax\n", imm8(buffer, &j)) ; break ; 
-			case 0xe8: printf("call %s\n", rel16(buffer, &j)) ; break ;
-			case 0xe9: printf("jmp %s\n", jump_near(buffer, &j)) ; break ; 
-			case 0xea: printf("jmp %s\n", jump_inter_segment(buffer, &j)) ; break ; 
-			case 0xeb: printf("jmp short %s\n", jump_short(buffer, &j)); break ; 
-			case 0xec: printf("in al,dx\n") ; break ; 
-			case 0xed: printf("in ax, dx\n") ; break ; 
-			case 0xee: printf("out dx,al\n") ; break ; 
-			case 0xef: printf("out dx,ax\n") ; break ; 
-			case 0xf0: printf("lock "); prefix = 1 ; break ; // lock  prefix
-			case 0xf3: printf("repe ") ; prefix = 1 ; break;  // repe prefix 
-			case 0xf4: printf("hlt\n") ; break ; 
-			case 0xf5: printf("cmc\n"); break ;
-			case 0xf6:
-			{
-				p = j ;  s = ((buffer[++p] & 0x38) >> 3) ;
-				switch (s)
-				{
-					case 0x00:
-					{
-						printf("test %s\n", rm8_imm8(buffer, &j)) ;
-					} break ;
-					case 0x04:
-					{
-						printf("mul %s\n", rm8(buffer, &j)) ; break ; 
-					} break ;
-					case 0x05:
-					{
-						printf("imul %s\n", rm8(buffer, &j)) ; break ; 
-					} break ;
-					case 0x06:
-					{
-					    printf("div %s\n", rm8(buffer, &j)) ; break ; 
-					} break ;
-					default: t= 1 ; 
-				}  
-				if (t == 1) { printf("db 0x%x\n", buffer[j]); break; }
-			} tikrinti(t) ;
-			case 0xf7:
-			{
-				p = j ;  s = ((buffer[++p] & 0x38) >> 3) ;
-				switch (s)
-				{
-					case 0x00:
-					{
-						printf("test %s\n", rm16_imm16(buffer, &j)) ;   
-					} break ; 
-					case 0x04:
-					{
-						printf("mul %s\n", rm16(buffer, &j)); break ;
-					} break ;
-					case 0x05:
-					{
-						printf("imul %s\n", rm16(buffer, &j)); break ;
-					} break ;
-					case 0x06:
-					{
-						printf("div %s\n", rm16(buffer, &j)) ; break ; 
-					} break ; 
-					default: t=1 ; 
-				}  
-				if (t == 1) { printf("db 0x%x\n", buffer[j]); break; }
-			} tikrinti(t) ;
-			case 0xf8: printf("clc\n") ; break ;
-			case 0xf9: printf("stc\n") ; break ;
-			case 0xfa: printf("cli\n") ; break ;
-			case 0xfb: printf("sti\n") ; break ; 
-			case 0xfc: printf("cld\n") ; break ;
-			case 0xfd: printf("std\n") ; break ;
-			case 0xfe:
-			{
-				p = j ;  s = ((buffer[++p] & 0x38) >> 3) ;
-				switch (s)
-				{
-					case 0x00:
-					{
-						printf("inc %s\n", rm8(buffer, &j)) ; 
-					} break ; 
-					case 0x01:
-					{
-						printf("dec %s\n",  rm8(buffer, &j)) ; 
-					} break ;
-					default: t= 1 ; 
+					case 0x00: parse("add %s\n", rm16_imm8, buffer, &j) ; break ;
+					case 0x02: parse("adc %s\n", rm16_imm8, buffer, &j) ; break ;
+					case 0x03: parse("sbb %s\n", rm16_imm8, buffer, &j) ; break ;
+					case 0x05: parse("sub %s\n", rm16_imm8, buffer, &j) ; break ;
+					case 0x07: parse("cmp %s\n", rm16_imm8, buffer, &j) ; break ;
+					default: t = 1; break ;
 				} 
-				if (t == 1) { printf("db 0x%x\n", buffer[j]); break; }
-			} tikrinti(t) ; 
-			case 0xff:
-			{
-				p = j ;  s = ((buffer[++p] & 0x38) >> 3) ;
-				switch (s)
-				{
-					case 0x00:
-					{
-					  printf("inc word %s\n", rm16(buffer, &j)) ; 
-					} break ;
-					case 0x01:
-					{
-						printf("dec word %s\n",  rm16(buffer, &j)) ; 
-					} break ;
-					case 0x02:
-					{
-						printf("call near %s\n", rm16(buffer, &j)) ; 
-					} break ; 
-					case 0x03:
-					{
-						printf("call far %s\n", m16(buffer, &j)) ; 
-					} break ;
-					case 0x04:
-					{
-						printf("jmp near %s\n", jump_near_indirect(buffer, &j)) ; 
-					} break ;
-					case 0x05:
-					{
-						printf("jmp far %s\n", jump_far(buffer, &j)) ; 
-					} break ; 
-					case 0x06:
-					{
-						j++ ; printf("push %s\n", m16(buffer, &j)) ; 
-					} break ;
-					default: t= 1 ;    
-				}  
-				if (t == 1) { printf("db 0x%x\n", buffer[j]); break; }
-			}  tikrinti(t) ;  
-			default: printf("db 0x%x\n", buffer[j]); 
-		}
-		j++ ; 
-	}     
-}
-
-uchar *imm8(uchar *buffer, long *j)
-{
-    (*j)++ ;
-    sprintf(var, "0x%x", buffer[*j]) ;     
-    return var;  
-}
-
-uchar *imm16(uchar *buffer, long *j)
-{
-	(*j)++ ; 
-	uchar low = buffer[*j] ; 
-	(*j)++ ; 
-	uchar high = buffer[*j] ; 
-	uint16 imm = (high << 8) + low ;
-	sprintf(var, "0x%x", imm) ; 
-	return var ;  
-}
-
-char *rm(uchar *buffer, long *j, uchar bit)
-{
-    memset(rm_var, '\0', 64) ; 
-    uchar rm_byte = buffer[++(*j)] ; 
-    uchar mod = (rm_byte) >> 6 ; 
-    uchar rm = rm_byte &  7 ; 
-    uchar dip = 0 ; 
-    signed short disp2 = 0  ;
-	unsigned short disp = 0 ; 
-    char sign = '+' ;  
-    switch (mod)
-    {
-        case 0x00:
-		{
-			dip = 1  ;   
-		} break ; 
-        case 0x01:
-		{
-			signed char low = buffer[++(*j)] ;
-			disp2 = low ; 
-			if (disp2 < 0)  { sign = '-' ; }  
-			disp = disp2 ; 
-			
-		} break ;
-        case 0x2:
-		{
-			(*j)++ ; 
-			uchar low =  buffer[*j] ; 
-			(*j)++ ; 
-			uchar high = buffer[*j] ; 
-			disp =  (((high << 8) + low)  ); 
-		} break ; 
-        case 0x03:
-		{
-			if (bit == 8) return reg8[rm] ; 
-			else return reg16[rm] ; 
-		} break ;                                        
-    }
-	if (rm == 0x02)
-	{
-	switch (rm)
-	{
-	   case 0x00: sprintf(rm_var,"[bx+si%c0x%x]", sign, abs((signed short)disp)) ; break ;
-	   case 0x01: sprintf(rm_var,"[bx+di%c0x%x]", sign,  abs((signed short)disp)) ; break ; 
-	   case 0x02: sprintf(rm_var,"[bp+si%c0x%x]", sign,  abs((signed short)disp)) ; break ;
-	   case 0x03: sprintf(rm_var,"[bp+di%c0x%x]", sign,  abs((signed short)disp)) ;   break ;
-	   case 0x04: sprintf(rm_var,"[si%c0x%x]", sign,  abs((signed short)disp)) ;  break ;
-	   case 0x05: if (dip != 1)  sprintf(rm_var,"[di%c0x%x]", sign,  abs((signed short)disp)) ;  break ;
-	   case 0x06: sprintf(rm_var,"[bp%c0x%hx]", sign,  abs((signed short)disp)) ; break ; 
-	   case 0x07: if (dip != 1 ) sprintf(rm_var,"[bx%c0x%x]", sign, abs((signed short)disp)) ; break ;
-	}
-	}
-	else {
-    switch (rm)
-    {
-        case 0x00: if (dip != 1)  sprintf(rm_var,"[bx+si%c0x%x]", sign, abs((signed short)disp)) ; else sprintf(rm_var,"[bx+si]") ; break ; 
-        case 0x01: if (dip != 1)  sprintf(rm_var,"[bx+di%c0x%x]", sign,  disp) ; else sprintf(rm_var,"[bx+di]") ;  break ; 
-        case 0x02: if (dip != 1)  sprintf(rm_var,"[bp+si%c0x%x]", sign,  disp) ; else sprintf(rm_var,"[bp+si]") ;  break ;
-        case 0x03: if (dip != 1)  sprintf(rm_var,"[bp+di%c0x%x]", sign,  disp) ; else sprintf(rm_var,"[bp+di]") ;  break ;
-        case 0x04: if (dip != 1)  sprintf(rm_var,"[si%c0x%x]", sign,  disp) ; else sprintf(rm_var,"[si]") ; break ;
-        case 0x05: if (dip != 1)  sprintf(rm_var,"[di%c0x%x]", sign,  disp) ; else  sprintf(rm_var,"[di]"); break ;
-        case 0x06:
-		{
-			if (dip == 1)
-			{
-				(*j)++ ; 
-				uchar low = buffer[*j] ; 
-				(*j)++ ; 
-				uchar high = buffer[*j] ; 
-				disp = ((high << 8) + low) ;
-				sprintf(rm_var,"[0x%hx]", disp) ; 
+				if (t) goto print_symbol ;
+			} break ;
+			case 0x84: parse("test %s\n", rm8_r8, buffer, &j) ; break ;
+			case 0x85: parse("test %s\n", rm16_r16, buffer, &j) ; break ;
+			case 0x86: parse("xchg %s\n", rm8_r8, buffer, &j) ; break ;
+			case 0x87: parse("xchg %s\n", rm16_r16, buffer, &j) ; break ;
+			case 0x88: parse("mov %s\n", rm8_r8, buffer, &j) ; break ;
+			case 0x89: parse("mov %s\n", rm16_r16, buffer, &j) ; break ;
+			case 0x8A: parse("mov %s\n", r8_rm8, buffer, &j) ; break ;
+			case 0x8B: parse("mov %s\n", r16_rm16, buffer, &j) ; break ;
+			case 0x8C: 
+			{ 
+				int error;
+				rm16_sreg(buffer, &j, &error) ;
+				if (!error) { printf("mov %s\n", rm16_sreg(buffer, &j, &error)) ; break ; }
+				else { goto print_symbol ;  }
 			}
-			else  {  sprintf(rm_var,"[bp%c0x%hx]", sign,  disp) ; } break ; 
+			case 0x8D: parse("lea %s\n", r16_rm16, buffer, &j) ; break ;
+			case 0x8E: 
+			{
+				int error;
+				sreg_rm16(buffer, &j, &error) ;
+				if (!error) { printf("mov %s\n", sreg_rm16(buffer, &j, &error)) ; break ; }
+				else { goto print_symbol ;}
+			}
+			case 0x8F:
+			{
+			  	unsigned char opcode = ((buffer[++j] & 0x38) >> 3 ); 
+				j-- ; 
+				unsigned char t = 0 ;
+				switch (opcode)
+				{
+					case 0x00: parse("pop word %s\n", m16, buffer, &j) ; break ;
+					default: t = 1; break ;
+				}	
+				if (t) goto print_symbol ;
+			} break ;
+			case 0x90: parse_noop("xchg ax,ax\n", buffer, &j) ; break ;
+			case 0x91: parse_noop("xchg cx,ax\n", buffer, &j) ; break ;
+			case 0x92: parse_noop("xchg dx,ax\n", buffer, &j) ; break ;
+			case 0x93: parse_noop("xchg bx,ax\n", buffer, &j) ; break ;
+			case 0x94: parse_noop("xchg sp,ax\n", buffer, &j) ; break ;
+			case 0x95: parse_noop("xchg bp,ax\n", buffer, &j) ; break ;
+			case 0x96: parse_noop("xchg si,ax\n", buffer, &j) ; break ;
+			case 0x97: parse_noop("xchg di,ax\n", buffer, &j) ; break ;
+			case 0x98: parse_noop("cbw\n", buffer, &j) ; break ;
+			case 0x99: parse_noop("cwd\n", buffer, &j) ; break ;
+			case 0x9A: parse("call %s\n", call_inter, buffer, &j) ; break ; 
+			case 0x9B: parse_noop("wait\n", buffer, &j) ; break ;
+			case 0x9C: parse_noop("pushf\n", buffer, &j) ; break ;
+			case 0x9D: parse_noop("popf\n", buffer, &j) ; break ;
+			case 0x9E: parse_noop("sahf\n", buffer, &j) ; break ;
+			case 0x9F: parse_noop("lahf\n", buffer, &j) ; break ;
+			case 0xA0: parse("mov al,%s\n", moffs16, buffer, &j) ; break ;
+			case 0xA1: parse("mov ax,%s\n", moffs16, buffer, &j) ; break ;
+			case 0xA2: parse("mov %s,al\n", moffs16, buffer, &j) ; break ;
+			case 0xA3: parse("mov %s,ax\n", moffs16, buffer, &j) ; break ;
+			case 0xA4: parse_noop("movsb\n", buffer, &j) ; break ;
+			case 0xA5: parse_noop("movsw\n", buffer, &j) ; break ;
+			case 0xA6: parse_noop("cmpsb\n", buffer, &j) ; break ;
+			case 0xA7: parse_noop("cmpsw\n", buffer, &j) ; break ;
+			case 0xA8: parse("test al, %s\n", imm8, buffer, &j) ; 
+			case 0xA9: parse("test ax, %s\n", imm16, buffer, &j) ; 
+			case 0xAA: parse_noop("stosb\n", buffer, &j) ; break ;
+			case 0xAB: parse_noop("stosw\n", buffer, &j) ; break ;
+			case 0xAC: parse_noop("lodsb\n", buffer, &j) ; break ;
+			case 0xAD: parse_noop("lodsw\n", buffer, &j) ; break ;
+			case 0xAE: parse_noop("scasb\n", buffer, &j) ; break ;
+			case 0xAF: parse_noop("scasw\n", buffer, &j) ; break ;
+			case 0xC2: parse("ret %s\n", imm16, buffer, &j) ; break ; 
+			case 0xC3: parse_noop("ret\n", buffer, &j) ; break ;
+			case 0xC4: parse("les %s\n", r16_rm16, buffer, &j) ; break ;
+			case 0xC5: parse("lds %s\n", r16_rm16, buffer, &j) ; break ;
+			case 0xC6: parse("mov %s\n", rm16_imm8, buffer, &j) ; break ;
+			case 0xC7: parse("mov %s\n", rm16_imm16, buffer, &j) ; break ;
+			case 0xCA: parse("retf %s\n", imm16, buffer, &j) ; break ;
+			case 0xCB: parse_noop("retf\n", buffer, &j) ; break ;
+			case 0xCC: parse_noop("int3\n", buffer, &j) ; break ;
+			case 0xCD: parse("int %s\n", imm8, buffer, &j) ; break ;
+			case 0xCE: parse_noop("into\n", buffer, &j) ; break ;
+			case 0xCF: parse_noop("iret\n", buffer, &j) ; break ;
+			case 0xD0:
+			{
+				unsigned char opcode = ((buffer[++j] & 0x38) >> 3 ); 
+				j-- ;
+				unsigned char t = 0 ;
+				switch (opcode)
+				{
+					case 0x00: parse("rol %s,1\n", rm8, buffer, &j) ; break ;
+					case 0x01: parse("ror %s,1\n", rm8, buffer, &j) ; break ;
+					case 0x02: parse("rcl %s,1\n", rm8, buffer, &j) ; break ;
+					case 0x03: parse("rcr %s,1\n", rm8, buffer, &j) ; break ;
+					case 0x04: parse("shl %s,1\n", rm8, buffer, &j) ; break ;
+					case 0x05: parse("shr %s,1\n", rm8, buffer, &j) ; break ;
+					case 0x07: parse("sar %s,1\n", rm8, buffer, &j) ; break ;
+					default: t = 1; break ;
+				}
+				if (t) goto print_symbol ;
+			} break ;
+			case 0xD1:
+			{
+				unsigned char opcode = ((buffer[++j] & 0x38) >> 3 ); 
+				j-- ;	
+				unsigned char t = 0 ;
+				switch (opcode)
+				{
+					case 0x00: parse("rol %s,1\n", rm16, buffer, &j) ; break ;
+					case 0x01: parse("ror %s,1\n", rm16, buffer, &j) ; break ;
+					case 0x02: parse("rcl %s,1\n", rm16, buffer, &j) ; break ;
+					case 0x03: parse("rcr %s,1\n", rm16, buffer, &j) ; break ;
+					case 0x04: parse("shl %s,1\n", rm16, buffer, &j) ; break ;
+					case 0x05: parse("shr %s,1\n", rm16, buffer, &j) ; break ;
+					case 0x07: parse("sar %s,1\n", rm16, buffer, &j) ; break ;
+					default: t = 1; break ;
+				}
+				if (t) goto print_symbol ;
+			} break ;
+			case 0xD2:
+			{
+				unsigned char opcode = ((buffer[++j] & 0x38) >> 3 ); 
+				j-- ;	
+				unsigned char t = 0 ;
+				switch (opcode)
+				{
+					case 0x00: parse("rol %s,cl\n", rm8, buffer, &j) ; break ;
+					case 0x01: parse("ror %s,cl\n", rm8, buffer, &j) ; break ;
+					case 0x02: parse("rcl %s,cl\n", rm8, buffer, &j) ; break ;
+					case 0x03: parse("rcr %s,cl\n", rm8, buffer, &j) ; break ;
+					case 0x04: parse("shl %s,cl\n", rm8, buffer, &j) ; break ;
+					case 0x05: parse("shr %s,cl\n", rm8, buffer, &j) ; break ;
+					case 0x07: parse("sar %s,cl\n", rm8, buffer, &j) ; break ;
+					default: t = 1; break ;
+				}
+				if (t) goto print_symbol ;
+			} break ;
+			case 0xD3:
+			{
+				unsigned char opcode = ((buffer[++j] & 0x38) >> 3 ); 
+				j-- ;	
+				unsigned char t = 0 ;
+				switch (opcode)
+				{
+					case 0x00: parse("rol %s,cl\n", rm16, buffer, &j) ; break ;
+					case 0x01: parse("ror %s,cl\n", rm16, buffer, &j) ; break ;
+					case 0x02: parse("rcl %s,cl\n", rm16, buffer, &j) ; break ;
+					case 0x03: parse("rcr %s,cl\n", rm16, buffer, &j) ; break ;
+					case 0x04: parse("shl %s,cl\n", rm16, buffer, &j) ; break ;
+					case 0x05: parse("shr %s,cl\n", rm16, buffer, &j) ; break ;
+					case 0x07: parse("sar %s,cl\n", rm16, buffer, &j) ; break ;
+					default: t = 1; break ;
+				}
+				if (t) goto print_symbol ;
+			} break ;
+			case 0xD4: parse_noop("aam\n", buffer, &j) ; break ;
+			case 0xD5: parse_noop("aad\n", buffer, &j) ; break ;
+			case 0xD7: parse_noop("xlatb\n", buffer, &j) ; break ;
+			/*D8-DF => ESC0-7*/
+			case 0xE0: parse("loopne %s\n", rel8, buffer, &j) ; break ;
+			case 0xE1: parse("loope %s\n", rel8, buffer, &j) ; break ;
+			case 0xE2: parse("loop %s\n", rel8, buffer, &j) ; break ;
+			case 0xE3: parse("jcxz %s\n", rel8, buffer, &j) ; break ;
+			case 0xE4: parse("in al,%s\n", imm8, buffer, &j) ; break ;
+			case 0xE5: parse("in ax,%s\n", imm8, buffer, &j) ; break ;
+			case 0xE6: parse("out %s,al\n", imm8, buffer, &j) ; break ;
+			case 0xE7: parse("out %s,ax\n", imm8, buffer, &j) ; break ;
+			case 0xE8: parse("call %s\n", rel16, buffer, &j) ; break ;
+			case 0xE9: parse("jmp %s\n", rel16, buffer, &j) ; break ;
+			case 0xEA: parse("jmp %s\n", call_inter, buffer, &j) ; break ;
+			case 0xEB: parse("jmp short %s\n", rel8, buffer, &j) ; break ;
+			case 0xEC: parse_noop("in al,dx\n", buffer, &j) ; break ;
+			case 0xED: parse_noop("in ax,dx\n", buffer, &j) ; break ;
+			case 0xEE: parse_noop("out dx,al\n", buffer, &j) ; break ;
+			case 0xEF: parse_noop("out dx,ax\n", buffer, &j) ; break ;
+			case 0xF0: printf("lock ") ; break ;
+			case 0xF2: printf("repne ") ; break ;
+			case 0xF3: printf("rep ") ; break ;
+			case 0xF4: parse_noop("hlt\n", buffer, &j) ; break ;
+			case 0xF5: parse_noop("cmc\n", buffer, &j) ; break ;
+			case 0xF6:
+			{
+				unsigned char opcode = ((buffer[++j] & 0x38) >> 3 ); 
+				j-- ;	
+				unsigned char t = 0 ;
+				switch (opcode)
+				{
+					case 0x00: parse("test %s\n", rm8_imm8, buffer, &j) ; break ;
+					case 0x02: parse("not %s\n", rm8, buffer, &j) ; break ;
+					case 0x03: parse("neg %s\n", rm8, buffer, &j) ; break ;
+					case 0x04: parse("mul %s\n", rm8, buffer, &j) ; break ;
+					case 0x05: parse("imul %s\n", rm8, buffer, &j) ; break ;
+					case 0x06: parse("div %s\n", rm8, buffer, &j) ; break ;
+					case 0x07: parse("idiv %s\n", rm8, buffer, &j) ; break ;
+					default: t = 1; break ;
+				}
+				if (t) goto print_symbol ;
+			} break ;
+			case 0xF7:
+			{
+				unsigned char opcode = ((buffer[++j] & 0x38) >> 3 ); 
+				unsigned char t = 0 ;
+				j-- ;	
+				switch (opcode)
+				{
+					case 0x00: parse("test %s\n", rm16_imm16, buffer, &j) ; break ;
+					case 0x02: parse("not %s\n", rm16, buffer, &j) ; break ;
+					case 0x03: parse("neg %s\n", rm16, buffer, &j) ; break ;
+					case 0x04: parse("mul %s\n", rm16, buffer, &j) ; break ;
+					case 0x05: parse("imul %s\n", rm16, buffer, &j) ; break ;
+					case 0x06: parse("div %s\n", rm16, buffer, &j) ; break ;
+					case 0x07: parse("idiv %s\n", rm16, buffer, &j) ; break ;
+					default: t = 1; break ;
+				}
+				if (t) goto print_symbol ;
+			} break ;
+			case 0xF8: parse_noop("clc\n", buffer, &j) ; break ;
+			case 0xF9: parse_noop("stc\n", buffer, &j) ; break ;
+			case 0xFA: parse_noop("cli\n", buffer, &j) ; break ;
+			case 0xFB: parse_noop("sti\n", buffer, &j) ; break ;
+			case 0xFC: parse_noop("cld\n", buffer, &j) ; break ;
+			case 0xFD: parse_noop("std\n", buffer, &j) ; break ;
+			case 0xFE:
+			{
+				unsigned char opcode = ((buffer[++j] & 0x38) >> 3 ); 
+				j-- ;
+				unsigned char t = 0 ;	
+				switch (opcode)
+				{
+					case 0x00: parse("inc %s\n", rm8, buffer,&j) ; break ;
+					case 0x01: parse("dec %s\n", rm8, buffer,&j) ; break ;
+					default: t = 1; break ;
+				}
+				if (t) goto print_symbol ;
+			} break ;
+			case 0xFF:
+			{
+				unsigned char opcode = ((buffer[++j] & 0x38) >> 3 ); 
+				j-- ;	
+				unsigned char t = 0 ;
+				switch (opcode)
+				{
+					case 0x00: parse("inc %s\n", rm16, buffer,&j) ; break ;
+					case 0x01: parse("dec %s\n", rm16, buffer,&j) ; break ;
+					case 0x02: parse("call near %s\n", rm16, buffer,&j) ; break ;
+					case 0x03: parse("call far %s\n", rm16, buffer,&j) ; break ;
+					case 0x04: parse("jmp near %s\n", rm16, buffer,&j) ; break ;
+					case 0x05: parse("jmp far %s\n", rm16, buffer,&j) ; break ;
+					case 0x06: parse("push %s\n", rm16, buffer,&j) ; break ;
+					default: t = 1; break ;
+				}
+				if (t) goto print_symbol ;
+			} break ;
+			print_symbol:
+			default: 
+			{
+				char tmp_buffer[20] ; 
+				memset(tmp_buffer, '\0', 20) ;
+				sprintf(tmp_buffer, "db 0x%X\n", buffer[j]) ;
+				parse_noop(tmp_buffer, buffer, &j) ;
+				break ;
+			}
+		}
+		j++ ;
+	}
+}
+
+char str[255] ; 
+
+char *moffs16(char *buffer, int *j, int *err)
+{
+	memset(str, '\0', 255) ;
+	char segment[10] ;
+	memset(segment, '\0', 10) ;
+	if (segment_override >= 0)
+	{
+		switch (segment_override)
+		{
+			case ES: sprintf(segment, "es:") ; break ;
+			case CS: sprintf(segment, "cs:") ; break ;
+			case SS: sprintf(segment, "ss:") ; break ;
+			case DS: sprintf(segment, "ds:") ; break ;
+		}
+		segment_override = -1 ;
+	}
+	if (get_bytes(2, *j))
+	{
+		*err = 1 ; 
+		return str ; 
+	}
+	(*j)++ ; 
+	bytes++ ;
+	unsigned char low = buffer[*j] ; 
+	(*j)++ ;
+	bytes++ ; 
+	unsigned char high = buffer[*j] ; 
+	unsigned short imm16 = ((high << 8) + low) ;
+	sprintf(str, "[%s0x%x]", segment, imm16) ;
+	return str ;
+}
+
+char *rm8(char *buffer, int *j, int *err)
+{
+	int error = 0 ;
+	memset(str, '\0', 255) ;
+	char *s =  rm(buffer, j, 8, &error)  ;
+	printf("%x", error) ;
+	if (error)
+	{
+		*err = 1 ;
+		return str ;
+	}
+	sprintf(str, "%s", s) ; 
+	return str ;
+}
+
+char *rm16(char *buffer, int *j, int *err)
+{
+	int error = 0; 
+	memset(str, '\0', 255) ;
+	char *s =  rm(buffer, j, 16, &error)  ;
+	if (error)
+	{
+		*err = error ;
+		return str; 
+	}
+	sprintf(str, "%s", s) ; 
+	return str ;
+}
+
+char *call_inter(char *buffer, int *j, int *err)
+{
+	memset(str, '\0', 255) ;
+	if (get_bytes(4, *j))
+	{
+		*err = 1 ; 
+		return str ;
+	}
+	(*j)++ ;
+	bytes++ ; 
+	unsigned char offset_low = buffer[*j] ; 
+	(*j)++ ;
+	bytes++ ;
+	unsigned char offset_high = buffer[*j] ; 
+	(*j)++ ;
+	bytes++ ;
+	unsigned char seg_low = buffer[*j] ; 
+	(*j)++ ;
+	bytes++ ;
+	unsigned char seg_high = buffer[*j] ; 
+	unsigned short offset = ((offset_high << 8) + offset_low) ; 
+	unsigned short seg = ((seg_high << 8) + seg_low) ;
+	sprintf(str,"0x%x:0x%x", seg, offset) ;
+	return str ;	
+}
+char *m16(char *buffer, int *j, int *err)
+{
+	int error = 0; 
+	memset(str, '\0', 255) ;
+	char *s =  rm(buffer, j, 16, &error)  ;
+	if (error)
+	{
+		*err = 1 ;
+		return str ;
+	}
+	sprintf(str,"%s", s) ;
+	return str ;
+}
+char *sreg_rm16(char *buffer, int *j, int *error) 
+{
+	int err = 0 ;
+	memset(str, '\0', 255) ;
+	if (get_bytes(1, *j))
+	{
+		*error = 1 ; 
+		return str ;
+	}
+	unsigned char reg = ((buffer[++(*j)] & 0x38) >> 3) ;
+	(*j)-- ;
+	char *s =  rm(buffer, j, 16, &err)  ;
+	if (err)
+	{
+		*error = 1 ;
+		return str ;
+	}
+	if (reg < 4)
+	{
+		char *sreg = segreg[reg] ;
+		sprintf(str,"%s,%s", sreg, s) ;
+		*error = 0 ;
+	} else *error = 1 ; 
+	return str ;
+}
+
+char *rm16_sreg(char *buffer, int *j, int *error)
+{
+	int err = 0; 
+	memset(str, '\0', 255) ;
+	if (get_bytes(1, *j))
+	{
+		*error = 1 ; 
+		return str ;
+	}
+	unsigned char reg = ((buffer[++(*j)] & 0x38) >> 3) ;
+	(*j)-- ; 
+	char *s =  rm(buffer, j, 16, &err)  ;
+	if (err)
+	{
+		*error = 1 ;
+		return str ;
+	}
+	if (reg < 4)
+	{
+		char *sreg = segreg[reg] ;
+		sprintf(str,"%s,%s", s, sreg) ;
+		*error = 0 ;
+	} else *error = 1 ; 
+	return str ;
+}
+char *rm16_imm8(char *buffer, int *j, int *err)
+{
+	int error = 0 ;
+	memset(str, '\0', 255) ;
+	char *s = rm(buffer, j, 16, &error) ;
+	if (error)
+	{
+		*err = 1 ; 
+		return str ;
+	}
+	(*j)++ ;
+	if (get_bytes(1, *j))
+	{
+		(*j)--;
+		*err = 1 ; 
+		return str ;
+	}
+	(*j)--;
+	(*j)++; 
+	bytes++ ;
+	signed char imm8 = buffer[*j] ; 
+	char sign = '+' ;
+	if (imm8 < 0) 
+	{
+		sign = '-' ;
+		imm8 = -imm8 ;
+	}
+	sprintf(str, "%s,byte %c0x%x", s, sign, imm8) ;
+	return str ;
+}
+char *rm16_imm16(char *buffer, int *j, int *err)
+{
+	int error = 0; 
+	memset(str, '\0', 255) ;
+	char *s = rm(buffer, j, 16, &error) ;
+	if (error)
+	{
+		*err = 1 ; 
+		return str ;
+	}
+	(*j)++ ;
+	if (get_bytes(2, *j))
+	{
+		(*j)-- ;
+		*err = 1 ;
+		return str ;
+	}
+	(*j)-- ;
+	(*j)++;
+	bytes++ ;
+	unsigned char low = buffer[*j] ; 
+	(*j)++ ;
+	bytes++ ;
+	unsigned char high = buffer[*j] ; 
+	unsigned short imm16 = ((high << 8) + low) ; 
+	sprintf(str, "%s,0x%x", s, imm16) ;
+	return str ;
+}
+char *rm8_imm8(char *buffer, int *j, int *err)
+{
+	int error = 0;
+	memset(str, '\0', 255) ;
+	char *s = rm(buffer, j, 8, &error) ;
+	if (error)
+	{
+		*err = 1 ; 
+		return str ;
+	}
+	(*j)++ ;
+	if (get_bytes(1, *j))
+	{
+		(*j)-- ;
+		*err = 1 ; 
+		return str ;
+	} 
+	(*j)-- ; 
+	(*j)++;
+	bytes++ ;
+	unsigned char imm8 = buffer[*j] ; 
+	sprintf(str, "%s,0x%x", s, imm8) ;
+	return str ;  
+}
+
+char *rel16(char *buffer, int *j, int *err)
+{
+	memset(str, '\0', 255) ;
+	if (get_bytes(2, *j))
+	{
+		*err = 1 ;
+		return str ;
+	}
+	(*j)++ ;
+	bytes++ ;
+	unsigned char rel_low = buffer[*j] ; 
+	(*j)++ ;
+	bytes++ ; 
+	unsigned char rel_high = buffer[*j] ; 
+	signed short rel = ((rel_high << 8) + rel_low) ;
+	unsigned short result = *j + rel + 1 ;
+	sprintf(str, "0x%x", result) ; 
+	return str ;
+}
+
+
+char *rel8(char *buffer, int *j, int *err)
+{
+	memset(str, '\0', 255) ;
+	if (get_bytes(1, *j))
+	{
+		*err = 1 ;
+		return str ;
+	}
+	(*j)++ ;
+	bytes++ ;
+	signed char rel = buffer[*j] ; 
+	unsigned short result = *j + rel + 1 ;
+	sprintf(str, "0x%x", result) ; 
+	return str ;
+}
+
+char *imm8(char *buffer, int *j, int *err)
+{
+	memset(str, '\0', 255) ;
+	if (get_bytes(1, *j))
+	{
+		*err = 1 ;
+		return str ;
+	}
+	(*j)++ ;
+	bytes++ ;
+	unsigned char imm8 = buffer[*j] ; 
+	sprintf(str, "0x%x", imm8) ; 
+	return str ; 
+}
+
+char *imm16(char *buffer, int *j, int *err)
+{
+	memset(str, '\0', 255) ;
+	if (get_bytes(2, *j))
+	{
+		*err = 1 ;
+		return str ;
+	}
+	(*j)++ ; 
+	bytes++ ;
+	unsigned char low = buffer[*j] ; 
+	(*j)++ ;
+	bytes++ ;
+	unsigned char high = buffer[*j] ; 
+	unsigned short imm16 = ((high << 8) + low) ;
+	sprintf(str, "0x%x", imm16); 
+	return str ;
+}
+
+char *r16_rm16(char *buffer, int *j, int *err)
+{
+	int error = 0 ;
+	memset(str, '\0', 255) ;
+	unsigned char reg = ((buffer[++(*j)] & 0x38) >> 3 ); 
+	(*j)-- ; 
+	char *s = rm(buffer, j, 16, &error) ;
+	if (error)
+	{
+		*err = 1 ; 
+		return str ;
+	}
+	char *reg16 = regs16[reg] ; 
+	sprintf(str, "%s,%s", reg16, s) ;
+	return str ;
+}
+
+char *rm8_r8(char *buffer, int *j, int *err)
+{
+	int error = 0; 
+	memset(str, '\0', 255) ;
+	unsigned char reg = ((buffer[++(*j)] & 0x38) >> 3 ); 
+	(*j)-- ; 
+	char *s = rm(buffer, j, 8, &error) ;
+	if (error)
+	{
+		*err = 1 ;
+		return str ;
+	}
+	char *reg8 = regs8[reg] ; 
+	sprintf(str, "%s,%s", s, reg8) ;
+	return str ;
+}
+
+char *r8_rm8(char *buffer, int *j, int *err)
+{
+	int error = 0 ;
+	memset(str, '\0', 255) ;
+	unsigned char reg = ((buffer[++(*j)] & 0x38) >> 3 ); 
+	(*j)-- ; 
+	char *s = rm(buffer, j, 8, &error) ;
+	if (error)
+	{
+		*err = 1 ;
+		return str ;
+	}
+	char *reg8 = regs8[reg] ;
+	sprintf(str, "%s,%s", reg8, s) ; 
+	return str ;
+}
+
+char *rm16_r16(char *buffer, int *j, int *err)
+{
+	int error = 0;
+	memset(str, '\0', 255) ; 
+	unsigned char reg = ((buffer[++(*j)] & 0x38) >> 3 ); 
+	(*j)-- ;
+	char *s = rm(buffer, j, 16, &error) ;
+	if (error)
+	{
+		*err = 1 ;
+		return str ;
+	}
+	char *reg16 = regs16[reg] ; 
+	sprintf(str, "%s,%s", s, reg16) ;
+	return str ;
+}
+
+char rm_str[255] ; 
+
+char *rm(char *buffer, int *j, char type, int *error)
+{
+	memset(rm_str, '\0', 255) ; 
+	bytes++ ;
+	if (get_bytes(1, *j))
+	{
+		bytes = 1 ;
+		*error = 1; 
+		return rm_str ;  
+	}
+	unsigned char rm_byte = buffer[++(*j)] ; 
+	unsigned char mod = (rm_byte >> 6) ; 
+	unsigned char rm8 = (rm_byte & 7) ; 
+	char disp_str[255] ; 
+	memset(rm_str, '\0', 255) ; 
+	memset(disp_str, '\0', 255) ;
+	char segment[10] ;
+	memset(segment, '\0', 10) ;
+	if (segment_override >= 0)
+	{
+		switch (segment_override)
+		{
+			case ES: sprintf(segment, "es:") ; break ;
+			case CS: sprintf(segment, "cs:") ; break ;
+			case SS: sprintf(segment, "ss:") ; break ;
+			case DS: sprintf(segment, "ds:") ; break ;
+		}
+	}
+	switch (mod)
+	{
+		case 0x0:
+		{
+		if (rm8 == 0x06)
+		{
+			if (get_bytes(2, *j))
+			{
+				*error = 1 ;
+				(*j)-- ; 
+				return rm_str ;  
+			}
+			(*j)++ ; 
+			bytes++ ;
+			unsigned char low = buffer[*j] ;
+			(*j)++ ; 
+			bytes++ ;
+			unsigned char high = buffer[*j] ; 
+			unsigned short disp = ((high << 8) + low) ; 
+			char sign = '+' ;
+			sprintf(disp_str, "%c0x%x", sign, disp) ;
+		}
+		else sprintf(disp_str, "") ;
 		} break ; 
-        case 0x07: if (dip != 1 ) sprintf(rm_var,"[bx%c0x%x]", sign, disp) ; else  sprintf(rm_var,"[bx]") ; break ; 
-    }
+		case 0x01:
+		{
+			if (get_bytes(1, *j))
+			{
+				*error = 1;
+				(*j)-- ;
+				return rm_str ;  
+			}
+			signed char disp_low = buffer[++(*j)] ; 
+			signed short disp = disp_low ; 
+			bytes++ ;
+			char sign = '+' ; 
+			if (disp < 0) sign = '-' ;
+			sprintf(disp_str, "%c0x%x", sign, disp) ; 
+		} break ;
+		case 0x02:
+		{
+			if (get_bytes(2, *j))
+			{
+				*error = 1;
+				(*j)-- ; 
+				return rm_str ;  
+			}
+			(*j)++ ; 
+			bytes++ ;
+			unsigned char low = buffer[*j] ;
+			(*j)++ ; 
+			bytes++ ;
+			unsigned char high = buffer[*j] ;
+			unsigned short disp = ((high << 8) + low) ; 
+			char sign = '+' ;
+			sprintf(disp_str, "%c0x%x", sign, disp) ;
+		} break ;
+		case 0x03:
+		{
+			if (type == 8)
+			{
+ 				return regs8[rm8] ;
+			}
+			if (type == 16)
+			{
+				return regs16[rm8]; 
+			}
+		} break ;
 	}
-	return rm_var ; 
-}
-
-char *rm8_imm8(uchar *buffer, long *j )
-{
-	memset(var, '\0', 64) ; 
-	char *s = rm(buffer, j, 8) ;
-	(*j)++ ;
-	sprintf(var, "%s,0x%x",s, buffer[*j]) ;     
-	return var; 
-}
-
-char *rm16_imm16(uchar *buffer, long *j)
-{
-	memset(var, '\0', 64) ;
-	char *s = rm(buffer, j, 16) ; 
-	(*j)++ ; 
-	uchar low = buffer[*j] ; 
-	(*j)++ ; 
-	uchar high = buffer[*j] ; 
-	uint16 imm = (high << 8) + low ;
-	sprintf(var, "%s,0x%x",s, imm) ;     
-	return var ; 
-}
-
-/* moffs - need to implement segment override */
-
-char *moffs(uchar *buffer, long *j)
-{
-	memset(var, '\0', 64) ;
-	(*j)++ ; 
-	uchar low = buffer[*j] ; 
-	(*j)++ ; 
-	uchar high = buffer[*j] ; 
-	uint16 moffs = (high << 8) + low ; 
-	sprintf(var, "[0x%x]", moffs) ; 
-	return var ; 
-}
-
-
-// sign extended version
-
-char *rm16_imm8(uchar *buffer, long *j)
-{
-    memset(var, '\0', 64) ; 
-    char *s = rm(buffer, j, 16) ;
-	(*j)++ ;
-	signed char  c  = (signed char)  buffer[*j] ;
-	if (abs(c) == c) sprintf(var, "%s,byte +0x%x",s, c) ;     
-	else {
-		c = -c ; 
-		sprintf(var, "%s,byte -0x%x",s, c) ;     
+	switch (rm8)
+	{
+		case 0x00: sprintf(rm_str, "[%sbx+si%s]", segment, disp_str) ; break ;
+		case 0x01: sprintf(rm_str, "[%sbx+di%s]", segment, disp_str) ; break ;
+		case 0x02: sprintf(rm_str, "[%sbp+si%s]", segment, disp_str) ; break ;
+		case 0x03: sprintf(rm_str, "[%sbp+di%s]", segment, disp_str) ; break ;
+		case 0x04: sprintf(rm_str, "[%ssi%s]", segment, disp_str) ; break ;
+		case 0x05: sprintf(rm_str, "[%sdi%s]", segment, disp_str) ; break ;
+		case 0x06: sprintf(rm_str, "[%sbp%s]", segment, disp_str) ; break ; 
+		case 0x07: sprintf(rm_str, "[%sbx%s]", segment, disp_str) ; break ;
 	}
-	return var; 
+	return rm_str ; 
 }
 
-char *rm16_imm8_2(uchar *buffer, long *j)
+char* read_file(char *name, long *num)
 {
-	memset(var, '\0', 64) ; 
-    char *s = rm(buffer, j, 16) ;
-	(*j)++ ;
-	unsigned char c = buffer[*j] ;
-	sprintf(var, "%s,0x%x",s, c) ;          
-	return var;
+	FILE *fp ;
+	char *buffer;
+	fp = fopen(name, "rb") ;
+	if (fp != NULL)
+	{
+		fseek(fp, 0, SEEK_END) ;
+		*num = ftell(fp) ;
+		rewind(fp) ;
+		buffer = (char*) malloc(sizeof(char) * (*num)) ;
+		if (buffer == NULL)
+		{
+			printf("Memory error!\n") ;
+			exit(1) ;
+		}
+		long result = fread(buffer, 1, *num, fp) ;
+		if (result != *num)
+		{
+			printf("File read error!\n") ;
+			exit(1) ;
+		}
+		num_bytes  = *num ;
+		return buffer; 
+	}
+	else
+	{
+		printf("Error opening file!\n") ;
+		exit(1) ;
+	}
 }
-
-char *rm8_r8(uchar *buffer, long *j)
-{
-    memset(var, '\0', 64) ; 
-    uchar reg = ((buffer[++(*j)] & 0x38) >> 3 ); 
-    (*j)-- ; 
-	char *s = rm(buffer, j, 8) ;
-	char *c_reg = reg8[reg] ; 
-	strcpy(var, s)  ;
-	strcat(var, ",")  ;
-	strcat(var, c_reg) ; 
-	strcat(var, "\0") ; 
-	return var ; 
-}
-
-char *rm16_r16(uchar *buffer, long *j)
-{
-	memset(var, '\0', 64) ; 
-	uchar reg = ((buffer[++(*j)] & 0x38) >> 3) ;
-	(*j)-- ; 
-	char *s = rm(buffer, j, 16)  ;
-	char *c_reg = reg16[reg]  ;
-	strcpy(var, s)  ;
-	strcat(var, ",")  ;
-	strcat(var, c_reg) ; 
-	strcat(var, "\0") ; 
-	return var ; 
-}
-
-char *rm16_sreg(uchar *buffer, long *j)
-{
-	memset(var, '\0', 64) ; 
-	uchar reg = ((buffer[++(*j)] & 0x38) >> 3) ;
-	(*j)-- ; 
-	char *s = rm(buffer, j, 16)  ;
-	char *c_reg = sreg[reg]  ;  
-	strcpy(var, s)  ;
-	strcat(var, ",")  ;
-	strcat(var, c_reg) ; 
-	strcat(var, "\0") ; 
-	return var ; 
-}
-
-char *r8_rm8(uchar *buffer, long *j)
-{
-    memset(var, '\0', 64) ; 
-    uchar reg = ((buffer[++(*j)] & 0x38) >> 3 ); 
-    (*j)-- ; 
-    char *s = rm(buffer, j, 8) ;
-    char *c_reg = reg8[reg] ; 
-    strcpy(var, c_reg)  ;
-    strcat(var, ",")  ;
-    strcat(var, s) ; 
-    strcat(var, "\0") ; 
-    return var ; 
-}
-
-
-char *r16_rm16(uchar *buffer, long *j)
-{
-	uchar reg = ((buffer[++(*j)] & 0x38) >> 3) ;
-	(*j)-- ;
-	memset(var, '\0', 64) ;  
-	char *s = rm(buffer, j, 16)  ;
-	char *c_reg = reg16[reg]  ;
-	strcpy(var, c_reg)  ;
-	strcat(var, ",")  ;
-	strcat(var, s) ; 
-	strcat(var, "\0") ; 
-	return var ; 
-}
-
-char *sreg_rm16(uchar *buffer, long *j)
-{
-	uchar reg = ((buffer[++(*j)] & 0x38) >> 3) ;
-	(*j)-- ;
-	memset(var, '\0', 64) ;  
-	char *s = rm(buffer, j, 16)  ;
-	char *c_reg = sreg[reg]  ;
-	strcpy(var, c_reg)  ;
-	strcat(var, ",")  ;
-	strcat(var, s) ; 
-	strcat(var, "\0") ; 
-	return var ; 
-}
-
-
-char *rm8(uchar *buffer, long *j)
-{
-	memset(var, '\0', 64) ;  
-	char *s = rm(buffer, j, 8)  ;
-	strcpy(var, s) ;
-	return var ; 
-}
-
-char *rm16(uchar *buffer, long *j)
-{
-	memset(var, '\0', 64) ; 
-	char *s = rm(buffer, j, 16) ;
-	strcpy(var, s) ; 
-	return var ; 
-}
-
-char *jump_short(uchar *buffer, long *j)
-{
-	memset(var, '\0', 64) ;
-	(*j)++ ; 
-	signed char imm = buffer[*j] ; 
-	unsigned short result = ( *j+imm+1 ) ; 
-	sprintf(var, "0x%x", result) ;
-	return var ; 
-}
-
-char *jmp_short_byte(uchar *buffer, long *j)
-{
-	memset(var, '\0', 64) ; 
-	(*j)++ ; 
-	signed char imm = buffer[*j]  ;
-	unsigned short result = ( *j+imm+1 ) ; 
-	sprintf(var, "0x%x", result) ; 
-	return var ; 
-}
-char *m16(uchar *buffer, long *j)
-{
-	memset(var, '\0', 64) ; 
-    (*j)++ ; 
-	uchar low = buffer[*j] ; 
-	(*j)++ ; 
-	uchar high = buffer[*j] ; 
-	uint16 imm = (high << 8) + low ;
-	sprintf(var, "[0x%x]", imm) ; 
-	return var ;  
-}
-
-char *rel16(uchar *buffer, long *j)
-{
-	memset(var, '\0', 64) ; 
-    (*j)++ ; 
-	uchar low = buffer[*j] ; 
-	(*j)++ ; 
-	uchar high = buffer[*j] ; 
-	signed short imm = (high << 8) + low ; 
-	uint16 result = *j + imm + 1 ; 
-	sprintf(var, "0x%x", result) ; 
-	return var ;  
-}
-
-char *rel8(uchar *buffer, long *j)
-{
-	memset(var, '\0', 64) ; 
-    (*j)++ ; 
-	signed char imm = buffer[*j] ; 
-    unsigned short result = *j + imm + 1 ; 
-	sprintf(var, "0x%x", result) ; 
-	return var ;  
-}
-
-
-
-
